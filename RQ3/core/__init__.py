@@ -1,7 +1,13 @@
 """Core utilities for RQ3 simulations."""
 
 from . import baseline, io, metrics, predictions, scheduling, simulation, timeline
-from .baseline import baseline_detection_metrics, build_threshold_map
+from .baseline import (
+    DetectionTarget,
+    baseline_detection_metrics,
+    build_threshold_map,
+    compute_detection_targets,
+    group_detection_targets,
+)
 from .io import (
     DEFAULTS,
     ensure_directory,
@@ -66,8 +72,11 @@ __all__ = [
     "parse_build_counts_csv",
     "resolve_default",
     "resolve_default_path",
+    "DetectionTarget",
     "baseline_detection_metrics",
     "build_threshold_map",
+    "compute_detection_targets",
+    "group_detection_targets",
     "safe_ratio",
     "summarize_schedule",
     "summarize_schedule_by_project",

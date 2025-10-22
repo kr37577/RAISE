@@ -5,10 +5,11 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
+from .baseline import DetectionTarget
 from .metrics import safe_ratio, summarize_schedule
 from .scheduling import iter_strategies, run_strategy
 
@@ -90,24 +91,74 @@ def prepare_schedule_for_waste_analysis(df: pd.DataFrame) -> pd.DataFrame:
     return schedule.dropna(subset=["project", "schedule_date"])
 
 
+def _sort_targets(targets: Iterable[DetectionTarget]) -> List[DetectionTarget]:
+    """Return detection targets sorted by cumulative build threshold."""
+
+    sortable: List[DetectionTarget] = list(targets)
+    sortable.sort(key=lambda target: target.baseline_detection_builds)
+    return sortable
+
+
+def _fallback_targets_from_baseline(baseline_df: pd.DataFrame) -> Dict[str, List[DetectionTarget]]:
+    """Create single-entry detection targets from aggregated baseline metrics."""
+
+    targets: Dict[str, List[DetectionTarget]] = {}
+    for _, row in baseline_df.iterrows():
+        project = str(row.get("project", "")).strip()
+        if not project:
+            continue
+        builds_per_day = float(row.get("builds_per_day", 0.0))
+        detection_days = float(row.get("baseline_detection_days", float("nan")))
+        baseline_builds_raw = float(row.get("baseline_detection_builds", float("nan")))
+
+        if math.isfinite(baseline_builds_raw) and baseline_builds_raw > 0:
+            baseline_builds = baseline_builds_raw
+        elif math.isfinite(detection_days) and detection_days > 0:
+            if math.isfinite(builds_per_day) and builds_per_day > 0:
+                baseline_builds = detection_days * builds_per_day
+            else:
+                baseline_builds = detection_days
+        else:
+            baseline_builds = float("inf")
+
+        targets[project] = [
+            DetectionTarget(
+                project=project,
+                vulnerability_id=f"{project}#baseline",
+                detection_time_days=detection_days,
+                builds_per_day=builds_per_day,
+                baseline_detection_builds=baseline_builds if math.isfinite(baseline_builds) else float("inf"),
+            )
+        ]
+    return targets
+
+
 def summarize_wasted_builds(
     schedules: Dict[str, pd.DataFrame],
     baseline_df: pd.DataFrame,
     detection_window_days: int,
+    detection_targets: Optional[Dict[str, List[DetectionTarget]]] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Evaluate detection outcomes using build-index thresholds."""
+    """Evaluate detection outcomes using per-vulnerability thresholds."""
 
-    from .baseline import build_threshold_map
-
-    thresholds = build_threshold_map(baseline_df)
-    baseline_rates = {
-        str(row.get("project", "")).strip(): float(row.get("builds_per_day", 0.0))
-        for _, row in baseline_df.iterrows()
-    }
     detection_window = (
         pd.Timedelta(days=detection_window_days) if detection_window_days > 0 else None
     )
     EPS = 1e-9
+
+    baseline_rates = {
+        str(row.get("project", "")).strip(): float(row.get("builds_per_day", 0.0))
+        for _, row in baseline_df.iterrows()
+    }
+    if detection_targets is None:
+        detection_targets_map = {
+            project: _sort_targets(targets)
+            for project, targets in _fallback_targets_from_baseline(baseline_df).items()
+        }
+    else:
+        detection_targets_map = {
+            project: _sort_targets(targets) for project, targets in detection_targets.items()
+        }
 
     summary_records: List[Dict[str, object]] = []
     event_records: List[Dict[str, object]] = []
@@ -123,6 +174,7 @@ def summarize_wasted_builds(
                     "success_triggers": 0,
                     "wasted_triggers": 0,
                     "expired_triggers": 0,
+                    "baseline_only_triggers": 0,
                     "detections_completed": 0,
                     "detections_with_additional": 0,
                     "detections_baseline_only": 0,
@@ -137,6 +189,10 @@ def summarize_wasted_builds(
                     "projects": 0,
                     "projects_with_success": 0,
                     "projects_with_waste": 0,
+                    "vulnerabilities_total": 0,
+                    "vulnerabilities_detected_additional": 0,
+                    "vulnerabilities_detected_baseline": 0,
+                    "vulnerabilities_wasted": 0,
                 }
             )
             continue
@@ -147,26 +203,30 @@ def summarize_wasted_builds(
         total_additional_builds = float(prepared["scheduled_additional_builds"].sum())
         strategy_event_start = len(event_records)
 
-        detections_completed = 0
-        detections_with_additional = 0
-        detections_baseline_only = 0
+        strategy_detections_completed = 0
+        strategy_detections_additional = 0
+        strategy_detections_baseline = 0
+        strategy_vulnerabilities_total = 0
+        strategy_vulnerabilities_remaining = 0
 
         for project, group in prepared.groupby("project"):
-            threshold = thresholds.get(project, float("inf"))
-            if not math.isfinite(threshold) or threshold <= 0:
-                threshold = float("inf")
-
             baseline_rate = baseline_rates.get(project, 0.0)
             baseline_progress = 0.0
             baseline_history: Deque[Tuple[pd.Timestamp, float]] = deque()
-            detected_state: Optional[str] = None  # None, "baseline", "additional"
+            project_targets_all = detection_targets_map.get(project, [])
+            project_targets: List[DetectionTarget] = list(project_targets_all)
+            project_has_targets = bool(project_targets_all)
+            project_total_targets = len(project_targets_all)
+            project_detection_counter = 0
+            last_date: Optional[pd.Timestamp] = None
 
             group = group.sort_values("schedule_date").reset_index(drop=True)
-            last_date: Optional[pd.Timestamp] = None
 
             for _, row in group.iterrows():
                 schedule_date: pd.Timestamp = row["schedule_date"]
                 scheduled_builds = float(row["scheduled_additional_builds"])
+
+                baseline_detected_ids: List[str] = []
 
                 if (
                     baseline_rate > 0
@@ -183,73 +243,112 @@ def summarize_wasted_builds(
                             if detection_window is not None:
                                 baseline_history.append((day_stamp, baseline_rate))
 
+                expired_due_to_window = False
                 if detection_window is not None and pd.notna(schedule_date):
                     cutoff = schedule_date.normalize() - detection_window
                     while baseline_history and baseline_history[0][0] < cutoff:
                         _, contribution = baseline_history.popleft()
                         baseline_progress = max(baseline_progress - contribution, 0.0)
+                        expired_due_to_window = True
 
-                if (
-                    detected_state is None
-                    and math.isfinite(threshold)
-                    and threshold < float("inf")
-                    and baseline_progress + EPS >= threshold
-                ):
-                    detected_state = "baseline"
-                    detections_completed += 1
-                    detections_baseline_only += 1
+                while project_targets and baseline_progress + EPS >= project_targets[0].baseline_detection_builds:
+                    target = project_targets.pop(0)
+                    baseline_detected_ids.append(target.vulnerability_id)
+                    project_detection_counter += 1
+                    strategy_detections_completed += 1
+                    strategy_detections_baseline += 1
+
+                current_threshold = (
+                    project_targets[0].baseline_detection_builds if project_targets else float("inf")
+                )
 
                 classification = "pending"
                 success = False
                 consumed = 0.0
-                wasted = 0.0
+                wasted = scheduled_builds
+                detected_ids: List[str] = []
                 evaluation_baseline = baseline_progress
                 evaluation_trial = baseline_progress + scheduled_builds
 
-                if detected_state == "baseline":
-                    classification = "baseline_only"
-                    wasted = scheduled_builds
-                elif detected_state == "additional":
-                    classification = "fp"
-                    wasted = scheduled_builds
-                #     classification = "fp_post_detection"
-                #     wasted = scheduled_builds
-                # elif not math.isfinite(threshold) or threshold == float("inf"):
-                #     classification = "fp"
-                #     wasted = scheduled_builds
-                else:
-                    if evaluation_trial + EPS >= threshold:
-                        required = max(threshold - baseline_progress, 0.0)
-                        consumed = min(max(required, 0.0), scheduled_builds)
-                        wasted = max(scheduled_builds - consumed, 0.0)
-                        classification = "tp"
-                        success = True
-                        detections_completed += 1
-                        detections_with_additional += 1
-                        detected_state = "additional"
+                if not project_targets:
+                    if project_has_targets:
+                        classification = "baseline_only"
                     else:
                         classification = "fp"
-                        wasted = scheduled_builds
+                else:
+                    progress_for_event = baseline_progress
+                    remaining_builds = scheduled_builds
+
+                    while project_targets and remaining_builds + progress_for_event + EPS >= project_targets[0].baseline_detection_builds:
+                        target = project_targets[0]
+                        required = max(target.baseline_detection_builds - progress_for_event, 0.0)
+                        if required <= EPS:
+                            project_targets.pop(0)
+                            baseline_detected_ids.append(target.vulnerability_id)
+                            project_detection_counter += 1
+                            strategy_detections_completed += 1
+                            strategy_detections_baseline += 1
+                            progress_for_event = max(progress_for_event, target.baseline_detection_builds)
+                            continue
+                        if required > remaining_builds + EPS:
+                            break
+                        # Ensure numerical stability for very small requirements
+                        actual_required = min(required, remaining_builds)
+                        remaining_builds -= actual_required
+                        consumed += actual_required
+                        progress_for_event = max(progress_for_event, target.baseline_detection_builds)
+                        detected_ids.append(target.vulnerability_id)
+                        project_targets.pop(0)
+                        project_detection_counter += 1
+                        strategy_detections_completed += 1
+                        strategy_detections_additional += 1
+                        success = True
+
+                    wasted = remaining_builds
+                    if success:
+                        classification = "tp"
+                    elif project_has_targets and not project_targets and baseline_detected_ids:
+                        classification = "baseline_only"
+                    else:
+                        classification = "fp"
+
+                event_expired = False
+                if (
+                    detection_window is not None
+                    and classification == "fp"
+                    and project_has_targets
+                    and expired_due_to_window
+                ):
+                    classification = "expired"
+                    event_expired = True
 
                 event_records.append(
                     {
                         "strategy": strategy_name,
                         "project": project,
                         "schedule_date": schedule_date,
-                        "threshold": threshold,
+                        "threshold": current_threshold,
                         "scheduled_builds": scheduled_builds,
                         "consumed_builds": consumed,
                         "wasted_within_event": wasted,
                         "success": success,
-                        "expired": False,
-                        "detection_id": detections_completed if success else None,
+                        "expired": event_expired,
+                        "detection_id": project_detection_counter if success else None,
                         "classification": classification,
                         "evaluation_baseline": evaluation_baseline,
                         "evaluation_trial": evaluation_trial,
+                        "vulnerability_ids": ",".join(detected_ids),
+                        "baseline_vulnerability_ids": ",".join(baseline_detected_ids),
+                        "detections_count": len(detected_ids),
+                        "baseline_detections_count": len(baseline_detected_ids),
                     }
                 )
 
                 last_date = schedule_date
+
+            strategy_vulnerabilities_total += project_total_targets
+            project_remaining_targets = len(project_targets)
+            strategy_vulnerabilities_remaining += project_remaining_targets
 
         strategy_events = event_records[strategy_event_start:]
 
@@ -286,7 +385,6 @@ def summarize_wasted_builds(
             for event in strategy_events
             if event["classification"]
             in {"fp", "expired", "baseline_only"}
-            # {"fp", "fp_post_detection", "expired", "baseline_only"}
         }
 
         summary_records.append(
@@ -298,9 +396,9 @@ def summarize_wasted_builds(
                 "wasted_triggers": wasted_triggers,
                 "expired_triggers": expired_triggers,
                 "baseline_only_triggers": baseline_only_triggers,
-                "detections_completed": detections_completed,
-                "detections_with_additional": detections_with_additional,
-                "detections_baseline_only": detections_baseline_only,
+                "detections_completed": strategy_detections_completed,
+                "detections_with_additional": strategy_detections_additional,
+                "detections_baseline_only": strategy_detections_baseline,
                 "success_ratio": success_ratio,
                 "wasted_ratio": wasted_ratio,
                 "expired_ratio": expired_ratio,
@@ -312,6 +410,10 @@ def summarize_wasted_builds(
                 "projects": int(prepared["project"].nunique()),
                 "projects_with_success": len(project_success_projects),
                 "projects_with_waste": len(project_waste_projects),
+                "vulnerabilities_total": strategy_vulnerabilities_total,
+                "vulnerabilities_detected_additional": strategy_detections_additional,
+                "vulnerabilities_detected_baseline": strategy_detections_baseline,
+                "vulnerabilities_wasted": strategy_vulnerabilities_remaining,
             }
         )
 
@@ -333,6 +435,10 @@ def summarize_wasted_builds(
                 "classification",
                 "evaluation_baseline",
                 "evaluation_trial",
+                "vulnerability_ids",
+                "baseline_vulnerability_ids",
+                "detections_count",
+                "baseline_detections_count",
             ]
         )
     return summary_df, events_df

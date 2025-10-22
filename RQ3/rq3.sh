@@ -35,6 +35,9 @@ fi
 
 cd "${SCRIPT_DIR}"
 
+export PYTHONLOGLEVEL="${PYTHONLOGLEVEL:-INFO}" 
+export RQ3_LOG_LEVEL="${RQ3_LOG_LEVEL:-DEBUG}"
+
 run_step "Generating build timelines" \
   "${PYTHON_BIN}" "${SCRIPT_DIR}/timeline_cli_wrapper.py" "${TIMELINE_ARGS[@]}"
 

@@ -6,7 +6,15 @@ import argparse
 import os
 from typing import Optional
 
-from ..core import baseline_detection_metrics, ensure_directory, load_build_counts, load_detection_table, resolve_default
+from ..core import (
+    baseline_detection_metrics,
+    compute_detection_targets,
+    ensure_directory,
+    group_detection_targets,
+    load_build_counts,
+    load_detection_table,
+    resolve_default,
+)
 from ..core.metrics import aggregate_strategy_metrics, prepare_daily_totals, prepare_project_metrics
 from ..core.plotting import plot_additional_builds_boxplot
 from ..core.simulation import SimulationResult, run_minimal_simulation, summarize_wasted_builds
@@ -75,6 +83,8 @@ def main() -> None:
     detection_df = load_detection_table(args.detection_table)
     build_counts_df = load_build_counts(args.build_counts)
     baseline_df = baseline_detection_metrics(detection_df, build_counts_df)
+    detection_targets = compute_detection_targets(detection_df, build_counts_df)
+    detection_target_map = group_detection_targets(detection_targets)
 
     detection_window = max(int(args.detection_window_days), 0)
 
@@ -99,6 +109,7 @@ def main() -> None:
         schedules,
         baseline_df,
         detection_window,
+        detection_targets=detection_target_map,
     )
 
     summary_path = os.path.join(output_dir, "strategy_summary.csv")

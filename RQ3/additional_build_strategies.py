@@ -16,6 +16,7 @@ Inputs (default locations are relative to this file):
 
 from __future__ import annotations
 
+import logging
 import hashlib
 import json
 import math
@@ -33,13 +34,20 @@ try:
 except ImportError:  # pragma: no cover
     from core.io import load_detection_table, load_build_counts, normalise_path, resolve_default
 
+
 try:  # pragma: no cover - relative import when package context is available
     from ..prediction import settings as prediction_settings  # type: ignore[attr-defined]
 except Exception:  # pragma: no cover - fall back to absolute or skip
     try:
         from vuljit.prediction import settings as prediction_settings  # type: ignore[attr-defined]
     except Exception:  # pragma: no cover
-        prediction_settings = None
+        try:
+            from prediction import settings as prediction_settings  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover
+            prediction_settings = None
+            logging.getLogger(__name__).warning(
+                "Warning: could not import prediction settings; some features may be unavailable."
+            )
 
 RISK_COLUMN = "predicted_risk_VCCFinder_Coverage"
 
@@ -49,6 +57,8 @@ __all__ = [
     "strategy3_line_change_proportional",
     "strategy4_cross_project_regression",
 ]
+
+LOGGER = logging.getLogger(__name__)
 
 _STRATEGY4_BASE_FEATURES = ("builds_per_day", "label_flag")
 _STRATEGY4_FALLBACK_FEATURES = (
@@ -79,7 +89,9 @@ def _default_strategy4_features() -> List[str]:
     """Resolve default feature columns for Strategy4 from prediction settings."""
 
     feature_candidates: List[str] = []
-    if prediction_settings is not None:
+    if prediction_settings is None:
+        LOGGER.debug("Strategy4 debug: prediction_settings is None")
+    else:
         for attr in (
             # "KAMEI_FEATURES",
             "VCCFINDER_FEATURES",
@@ -87,6 +99,7 @@ def _default_strategy4_features() -> List[str]:
             "PROJECT_TOTAL_PERCENT_FEATURES",
         ):
             values = getattr(prediction_settings, attr, None)
+            LOGGER.debug("Strategy4 debug: %s -> %r", attr, values)
             if isinstance(values, (list, tuple)):
                 feature_candidates.extend(str(v) for v in values)
     # if not feature_candidates:
@@ -518,15 +531,15 @@ def _resolve_median_with_fallback(
         median_val, count_val = _extract(fold_stats)
         if median_val is not None:
             return median_val, count_val, "fold"
+    # フォールバックを削除　2025/10/22 
+    # project_stats_dict = project_stats.get("__overall__")
+    # project_median, project_count = _extract(project_stats_dict)
+    # if project_median is not None:
+    #     return project_median, project_count, "project"
 
-    project_stats_dict = project_stats.get("__overall__")
-    project_median, project_count = _extract(project_stats_dict)
-    if project_median is not None:
-        return project_median, project_count, "project"
-
-    global_median, global_count = _extract(global_stats)
-    if global_median is not None:
-        return global_median, global_count, "global"
+    # global_median, global_count = _extract(global_stats)
+    # if global_median is not None:
+    #     return global_median, global_count, "global"
 
     return None, None, None
 
@@ -850,10 +863,12 @@ def strategy1_median_schedule(
                 continue
 
             builds_per_day = float(row.get("builds_per_day", 0.0))
+            if not math.isfinite(builds_per_day) or builds_per_day <= 0:
+                continue
             scheduled = (
                 int(math.ceil(resolved_median_days * builds_per_day))
-                if builds_per_day > 0
-                else int(math.ceil(resolved_median_days))
+                # if builds_per_day > 0
+                # else int(math.ceil(resolved_median_days))
             )
             if scheduled <= 0:
                 continue
@@ -1324,6 +1339,12 @@ def _build_regression_dataset(
     use_recent_training: Optional[bool] = None,
 ) -> pd.DataFrame:
     feature_cols = tuple(feature_cols)
+    if LOGGER.isEnabledFor(logging.DEBUG):
+        LOGGER.debug(
+            "Strategy4 dataset build: features=%s (count=%d)",
+            feature_cols,
+            len(feature_cols),
+        )
     predictions_root = _resolve_path("phase5.predictions_root", predictions_root)
     build_counts_map = dict(zip(build_counts_df["project"], build_counts_df["builds_per_day"]))
     detection_lookup: Dict[str, Dict[pd.Timestamp, List[float]]] = {}
@@ -1339,6 +1360,8 @@ def _build_regression_dataset(
     rows: List[Dict[str, object]] = []
     for project, timeline in timelines.items():
         if timeline.empty:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug("Strategy4 dataset: skip %s (empty timeline)", project)
             continue
         extra_columns = [col for col in feature_cols if col not in _STRATEGY4_BASE_FEATURES]
         metadata = _get_project_walkforward_metadata(
@@ -1360,16 +1383,31 @@ def _build_regression_dataset(
             walkforward_assignments=assignments,
         )
         if labelled is None:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug("Strategy4 dataset: skip %s (no labelled timeline)", project)
             continue
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.debug("Strategy4 dataset: %s labelled rows=%s", project, labelled.shape)
         labelled = labelled.copy()
         labelled["label_flag"] = labelled["_strategy_label"].astype(bool)
         labelled = labelled[labelled["label_flag"]]
         if labelled.empty:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug("Strategy4 dataset: skip %s (no positive labels)", project)
             continue
         if "walkforward_fold" not in labelled.columns:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug("Strategy4 dataset: skip %s (missing walkforward_fold column)", project)
             continue
+        before_fold_filter = len(labelled)
         labelled = labelled[labelled["walkforward_fold"].notna()]
         if labelled.empty:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug(
+                    "Strategy4 dataset: skip %s (fold assignments missing; before=%d)",
+                    project,
+                    before_fold_filter,
+                )
             continue
         labelled["walkforward_fold"] = labelled["walkforward_fold"].astype(str)
         train_start_map: Dict[str, Optional[pd.Timestamp]] = {}
@@ -1387,12 +1425,22 @@ def _build_regression_dataset(
         labelled["validation_window_end"] = labelled["walkforward_fold"].map(val_end_map)
         labelled = labelled[labelled["validation_window_start"].notna()]
         if labelled.empty:
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug(
+                    "Strategy4 dataset: skip %s (validation window missing after mapping)",
+                    project,
+                )
             continue
 
         detection_map = detection_lookup.get(project, {})
         for _, row in labelled.iterrows():
             merge_date = row.get("merge_date_ts")
             if pd.isna(merge_date):
+                if LOGGER.isEnabledFor(logging.DEBUG):
+                    LOGGER.debug(
+                        "Strategy4 dataset: project %s row skipped (missing merge_date_ts)",
+                        project,
+                    )
                 continue
             builds_per_day = float(row.get("builds_per_day", 0.0))
             if builds_per_day <= 0 and project in build_counts_map:
@@ -1423,6 +1471,13 @@ def _build_regression_dataset(
             for col in feature_cols:
                 raw_value = row.get(col, np.nan)
                 if pd.isna(raw_value):
+                    if LOGGER.isEnabledFor(logging.DEBUG):
+                        LOGGER.debug(
+                            "Strategy4 dataset: project %s date %s missing feature %s (default to 0.0)",
+                            project,
+                            merge_date,
+                            col,
+                        )
                     value = 0.0
                 else:
                     try:
@@ -1435,9 +1490,19 @@ def _build_regression_dataset(
 
     dataset = pd.DataFrame(rows)
     if dataset.empty:
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.debug("Strategy4 dataset: no rows collected across projects.")
         return dataset
     required_columns = ["observed_additional_builds"] + list(feature_cols)
+    if LOGGER.isEnabledFor(logging.DEBUG):
+        LOGGER.debug(
+            "Strategy4 dataset: collected rows=%d; ensuring required columns=%s",
+            len(dataset),
+            required_columns,
+        )
     dataset = dataset.dropna(subset=required_columns).copy()
+    if LOGGER.isEnabledFor(logging.DEBUG):
+        LOGGER.debug("Strategy4 dataset: rows after dropna=%d", len(dataset))
     return dataset
 
 
