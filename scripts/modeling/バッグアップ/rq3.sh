@@ -4,14 +4,14 @@ set -euo pipefail
 PY=python
 
 # ==== 入力パス（あなたの環境に合わせて要確認） ====
-RQ3_PY="/work/riku-ka/vuljit/prediction/rq3_test_now.py"
-VULN="/work/riku-ka/vuljit/rq3_dataset/detection_time_results.csv"
-DAILY="/work/riku-ka/vuljit/outputs/results/random_forest"
-BUILDS="/work/riku-ka/vuljit/rq3_dataset/project_build_counts.csv"
+RQ3_PY="/work/riku-ka/vuljit/scripts/modeling/バッグアップ/rq3_test_now.py"
+VULN="/work/riku-ka/vuljit/datasets/raw/rq3_dataset/detection_time_results.csv"
+DAILY="/work/riku-ka/vuljit/datasets/model_outputs/random_forest"
+BUILDS="/work/riku-ka/vuljit/datasets/raw/rq3_dataset/project_build_counts.csv"
 
 # ==== 主要ハイパラ ====
 N=3
-OUT="/work/riku-ka/vuljit/outputs/rq3_det_outputs/predicted_risk_VCCFinder_Coverage"
+OUT="/work/riku-ka/vuljit/datasets/derived_artifacts/rq3_det_outputs/predicted_risk_VCCFinder_Coverage"
 R1=0.5
 R2=0.05
 RISK_COL="predicted_risk_VCCFinder_Coverage"

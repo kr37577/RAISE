@@ -346,13 +346,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Download oss-fuzz coverage report files (gz) from GCS over a period.")
     parser.add_argument('--csv', dest='csv_file_path', default=os.environ.get('VULJIT_VUL_CSV', os.path.join(repo_root, 'data', 'oss_fuzz_vulns_0802.csv')),
-                        help='Path to CSV file which contains package_name column (default: env VULJIT_VUL_CSV or vuljit/data/oss_fuzz_vulns_0802.csv)')
+                        help='Path to CSV file which contains package_name column (default: env VULJIT_VUL_CSV or vuljit/datasets/raw/oss_fuzz_vulns_0802.csv)')
     parser.add_argument('--start', dest='start_date', default=os.environ.get('VULJIT_START_DATE', '20160101'),
                         help='Start date YYYYMMDD (default: env VULJIT_START_DATE or 20160101)')
     parser.add_argument('--end', dest='end_date', default=os.environ.get('VULJIT_END_DATE', '20250802'),
                         help='End date YYYYMMDD (default: env VULJIT_END_DATE or 20250802)')
     parser.add_argument('--out', dest='dest_dir', default=os.environ.get('VULJIT_COVERAGE_DIR', os.path.join(repo_root, 'data', 'coverage_gz')),
-                        help='Destination root directory (default: env VULJIT_COVERAGE_DIR or vuljit/data/coverage_gz)')
+                        help='Destination root directory (default: env VULJIT_COVERAGE_DIR or vuljit/datasets/raw/coverage_gz)')
     parser.add_argument('--workers', dest='num_workers', type=int, default=int(os.environ.get('VULJIT_WORKERS', '8')),
                         help='Parallel workers (default: env VULJIT_WORKERS or 8)')
     parser.add_argument('--file', dest='files', action='append', default=None,

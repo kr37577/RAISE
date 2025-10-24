@@ -20,8 +20,8 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 vuljit_dir="$(cd "$script_dir/.." && pwd)"
 
 # Defaults (can be overridden by args or ENV)
-DEFAULT_VUL_CSV="${VULJIT_VUL_CSV:-${vuljit_dir}/data/oss_fuzz_vulns.csv}"
-DEFAULT_OUTPUT_DIR="${VULJIT_SRCDOWN_DIR:-${vuljit_dir}/data/srcmap_json}"
+DEFAULT_VUL_CSV="${VULJIT_VUL_CSV:-${vuljit_dir}/datasets/raw/oss_fuzz_vulns.csv}"
+DEFAULT_OUTPUT_DIR="${VULJIT_SRCDOWN_DIR:-${vuljit_dir}/datasets/raw/srcmap_json}"
 DEFAULT_START_DATE="${VULJIT_START_DATE:-20160101}"
 DEFAULT_END_DATE="${VULJIT_END_DATE:-20251231}"
 DEFAULT_WORKERS="${VULJIT_WORKERS:-8}"
@@ -33,7 +33,7 @@ END_DATE="${3:-$DEFAULT_END_DATE}"
 OUTPUT_DIR="${4:-$DEFAULT_OUTPUT_DIR}"
 WORKERS="${5:-$DEFAULT_WORKERS}"
 
-PYTHON_SCRIPT_PATH_1="${vuljit_dir}/download_gcs/download_srcmap.py"
+PYTHON_SCRIPT_PATH_1="${vuljit_dir}/scripts/data_acquisition/download_srcmap.py"
 
 echo "実行設定:"
 echo "  CSV:        $CSV_PATH"

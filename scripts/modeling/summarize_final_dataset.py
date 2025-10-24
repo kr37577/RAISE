@@ -444,7 +444,7 @@ def main():
     parser = argparse.ArgumentParser(description='Collect final daily-level dataset statistics and fill OSV/coverage narrative counts.')
     parser.add_argument('--base', default=default_base, help='Base data directory containing per-project daily CSVs.')
     parser.add_argument('--out', default=default_results, help='Results base directory to write stats under.')
-    parser.add_argument('--results', default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'outputs', 'results'), help='Base results directory containing per-model subfolders.')
+    parser.add_argument('--results', default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datasets', 'model_outputs'), help='Base results directory containing per-model subfolders.')
     parser.add_argument('--models', nargs='*', default=['xgboost', 'random_forest', 'random'], help='Model folder names under --results to consider for common projects.')
     parser.add_argument('--use-common-projects', action='store_true', help='If set, restrict to projects common to all specified model folders (directory presence).')
     parser.add_argument('--strict-common', action='store_true', help='If set, further restrict to projects that have metrics for ALL specified experiments and ALL models (like analyze_comparison).')
@@ -453,9 +453,9 @@ def main():
     # OSV / Coverage params
     here2 = os.path.dirname(os.path.abspath(__file__))
     repo_root2 = os.path.abspath(os.path.join(here2, '..', '..'))
-    default_vulns_csv = os.environ.get('VULJIT_VUL_CSV') or os.path.join(repo_root2, 'vuljit', 'rq3_dataset', 'oss_fuzz_vulns_2025802.csv')
+    default_vulns_csv = os.environ.get('VULJIT_VUL_CSV') or os.path.join(repo_root2, 'datasets', 'raw', 'rq3_dataset', 'oss_fuzz_vulns_2025802.csv')
     parser.add_argument('--vulns-csv', default=default_vulns_csv, help='Path to OSV vulnerabilities CSV (from oss-fuzz-vulns).')
-    default_c_cpp_list = os.path.join(repo_root2, 'vuljit', 'mapping', 'c_cpp_projects.txt')
+    default_c_cpp_list = os.path.join(repo_root2, 'datasets', 'reference_mappings', 'c_cpp_projects.txt')
     parser.add_argument('--c-cpp-list', default=default_c_cpp_list, help='Path to list of C/C++ OSS-Fuzz project names.')
     parser.add_argument('--coverage-root', default=_resolve_default_coverage_root(), help='Coverage reports root (downloaded OSS-Fuzz daily coverage).')
     parser.add_argument('--min-issues-per-repo', type=int, default=10, help='Threshold for min vulnerability reports per repo.')
@@ -468,8 +468,8 @@ def main():
 
     if not args.base:
         here = os.path.dirname(os.path.abspath(__file__))
-        repo_root = os.path.abspath(os.path.join(here, '..'))
-        args.base = os.path.join(repo_root, 'data')
+        repo_root = os.path.abspath(os.path.join(here, '..', '..'))
+        args.base = os.path.join(repo_root, 'datasets')
 
     # Parse period args to date
     def _parse_date_arg(s: str | None) -> date | None:
@@ -573,10 +573,10 @@ def main():
     # save outputs
     out_base = args.out
     if not out_base:
-        # default to repo outputs/results
+        # default to repo datasets/model_outputs
         here = os.path.dirname(os.path.abspath(__file__))
-        repo_root = os.path.abspath(os.path.join(here, '..'))
-        out_base = os.path.join(repo_root, 'outputs', 'results')
+        repo_root = os.path.abspath(os.path.join(here, '..', '..'))
+        out_base = os.path.join(repo_root, 'datasets', 'model_outputs')
 
     out_dir = os.path.join(out_base, 'final_dataset_stats' + ('_common_strict' if args.use_common_projects and args.strict_common else ('_common' if args.use_common_projects else '')))
     os.makedirs(out_dir, exist_ok=True)

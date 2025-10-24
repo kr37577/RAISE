@@ -18,14 +18,14 @@ PYTHON_EXEC="${PYTHON_EXEC:-python3}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 vuljit_dir="$(cd "$script_dir/.." && pwd)"
 
-PYTHON_SCRIPT_PATH_1="${vuljit_dir}/download_gcs/coverage_download_reports.py"
+PYTHON_SCRIPT_PATH_1="${vuljit_dir}/scripts/data_acquisition/coverage_download_reports.py"
 
 # --- zip化スクリプトとパラメータの設定 ---
-ZIP_SCRIPT_PATH="${vuljit_dir}/zip.sh"
+ZIP_SCRIPT_PATH="${vuljit_dir}/scripts/utilities/zip.sh"
 
-SOURCE_PARENT_DIR_FOR_ZIP="${VULJIT_COVERAGE_DIR:-${vuljit_dir}/data/coverage_gz}"
+SOURCE_PARENT_DIR_FOR_ZIP="${VULJIT_COVERAGE_DIR:-${vuljit_dir}/datasets/raw/coverage_gz}"
 NUM_TO_ZIP_PARAM="${VULJIT_NUM_TO_ZIP:-330}"
-OUTPUT_ZIP_DIR_PARAM="${VULJIT_COVERAGE_ZIP_DIR:-${vuljit_dir}/outputs/coverage_zip}"
+OUTPUT_ZIP_DIR_PARAM="${VULJIT_COVERAGE_ZIP_DIR:-${vuljit_dir}/datasets/derived_artifacts/coverage_zip}"
 
 # ログ用、エラー用ディレクトリ作成
 mkdir -p errors

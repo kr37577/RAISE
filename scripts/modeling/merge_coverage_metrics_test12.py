@@ -664,11 +664,11 @@ def main():
 
     # パス設定（引数優先、未指定時は repo 相対デフォルト）
     this_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.abspath(os.path.join(this_dir, '..'))
-    metrics_base_path = args.metrics or os.path.join(repo_root, 'data', 'metrics_output')
-    coverage_base_project_path = args.coverage or os.path.join(repo_root, 'outputs', 'metrics', 'coverage_aggregate')
-    patch_coverage_base_path = args.patch or os.path.join(repo_root, 'outputs', 'metrics', 'patch_coverage')
-    output_base_path = args.out or os.path.join(repo_root, 'data')
+    repo_root = os.path.abspath(os.path.join(this_dir, '..', '..'))
+    metrics_base_path = args.metrics or os.path.join(repo_root, 'datasets', 'metric_inputs')
+    coverage_base_project_path = args.coverage or os.path.join(repo_root, 'datasets', 'derived_artifacts', 'metrics', 'coverage_aggregate')
+    patch_coverage_base_path = args.patch or os.path.join(repo_root, 'datasets', 'derived_artifacts', 'metrics', 'patch_coverage')
+    output_base_path = args.out or os.path.join(repo_root, 'datasets', 'derived_artifacts')
 
     # 日付引数のパース
     def _parse_date_arg(s):

@@ -2,8 +2,8 @@ PY ?= python3
 PIP ?= pip3
 
 # Default dirs (overridden by .env or environment)
-DATA_DIR ?= $(PWD)/vuljit/data
-OUT_DIR  ?= $(PWD)/vuljit/outputs
+DATASETS_DIR ?= $(PWD)/vuljit/datasets
+DERIVED_DIR  ?= $(DATASETS_DIR)/derived_artifacts
 
 .PHONY: help setup download-srcmap download-coverage extract-metrics docker-build docker-bash package
 
@@ -64,8 +64,8 @@ docker-build:
 docker-bash:
 	docker run --rm -it \
 		--env-file vuljit/.env \
-		-v $(DATA_DIR):/app/vuljit/data \
-		-v $(OUT_DIR):/app/vuljit/outputs \
+		-v $(DATASETS_DIR):/app/vuljit/datasets \
+		-v $(DERIVED_DIR):/app/vuljit/datasets/derived_artifacts \
 		-w /app/vuljit \
 		vuljit:latest bash
 

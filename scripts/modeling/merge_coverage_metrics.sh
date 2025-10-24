@@ -19,12 +19,12 @@ export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 PYENV_ENV_NAME="py3"
 PYTHON_EXEC="${PYENV_ROOT}/versions/${PYENV_ENV_NAME}/bin/python"
-script_dir="/work/riku-ka/vuljit/prediction"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 PYTHON_SCRIPT_PATH_1="${script_dir}/merge_coverage_metrics_test12.py"
 
 # 後で消す
-VULJIT_BASE_DATA_DIR='/work/riku-ka/vuljit/data'
-VULJIT_PROJECT_MAPPING='/work/riku-ka/vuljit/mapping/filtered_project_mapping.csv'
+VULJIT_BASE_DATA_DIR='/work/riku-ka/vuljit/datasets/derived_artifacts'
+VULJIT_PROJECT_MAPPING='/work/riku-ka/vuljit/datasets/reference_mappings/filtered_project_mapping.csv'
 
 # ログ用、エラー用ディレクトリ作成
 mkdir -p errors
@@ -34,7 +34,7 @@ mkdir -p logs
 echo "====== Starting Slurm Task ${SLURM_ARRAY_TASK_ID} ======"
 
 # --- メイン処理 ---
-MAPPING_FILE="${VULJIT_PROJECT_MAPPING:-${script_dir}/project_mapping.csv}"
+MAPPING_FILE="${VULJIT_PROJECT_MAPPING:-${script_dir}/../project_mapping/filtered_project_mapping.csv}"
 TARGET_LINE=$(sed -n "$((${SLURM_ARRAY_TASK_ID} + 1))p" ${MAPPING_FILE})
 PROJECT_ID=$(echo ${TARGET_LINE} | cut -d',' -f1)
 DIRECTORY_NAME=$(echo ${TARGET_LINE} | cut -d',' -f2)
@@ -63,15 +63,13 @@ ${PYTHON_EXEC} "${PYTHON_SCRIPT_PATH_1}" "${PROJECT_ID}" "${DIRECTORY_NAME}" \
   --metrics "${METRICS_BASE_PATH}" \
   --coverage "${COVERAGE_BASE_PROJECT_PATH}" \
   --patch-coverage "${PATCH_COVERAGE_BASE_PATH}" \
-  --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../data}"
+  --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../../datasets/derived_artifacts}"
 # --out "${OUTPUT_BASE_PATH}"
 
 # ${PYTHON_EXEC} "${PYTHON_SCRIPT_PATH_1}" "${PROJECT_ID}" "${DIRECTORY_NAME}" \
-#   --metrics "${VULJIT_METRICS_DIR:-${script_dir}/../data/metrics_output}" \
-#   --coverage "${VULJIT_COVERAGE_AGG_DIR:-${script_dir}/../outputs/metrics/coverage_aggregate}" \
-#   --patch-coverage "${VULJIT_PATCH_COV_DIR:-${script_dir}/../outputs/metrics/patch_coverage}" \
-#   --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../data}"
+#   --metrics "${VULJIT_METRICS_DIR:-${script_dir}/../../datasets/metric_inputs}" \
+#   --coverage "${VULJIT_COVERAGE_AGG_DIR:-${script_dir}/../../datasets/derived_artifacts/metrics/coverage_aggregate}" \
+#   --patch-coverage "${VULJIT_PATCH_COV_DIR:-${script_dir}/../../datasets/derived_artifacts/metrics/patch_coverage}" \
+#   --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../../datasets/derived_artifacts}"
 
 echo "====== Finished Slurm Task ${SLURM_ARRAY_TASK_ID} ======"
-
-

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # 対象データディレクトリ（プロジェクト名の一覧をここから取得）
-DATA_DIR='/work/riku-ka/vuljit/data'
-SBATCH_SCRIPT="/work/riku-ka/vuljit/prediction/predict_one_project.sh"
+DATA_DIR='/work/riku-ka/vuljit/datasets/raw'
+SBATCH_SCRIPT="/work/riku-ka/vuljit/scripts/modeling/predict_one_project.sh"
 
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "[error] DATA_DIR not found: $DATA_DIR" >&2

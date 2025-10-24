@@ -20,10 +20,10 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 vuljit_dir="$(cd "$script_dir/.." && pwd)"
 
 ## 対象Pythonスクリプト（相対パス）
-PYTHON_SCRIPT_PATH_1="${vuljit_dir}/metrics_extraction/collect_code_text_metrics.py"
+PYTHON_SCRIPT_PATH_1="${vuljit_dir}/scripts/metric_extraction/collect_code_text_metrics.py"
 
 ## メトリクス出力ディレクトリ（環境変数で上書き可能）
-metrics_dir="${VULJIT_METRICS_DIR:-${vuljit_dir}/data/metrics_output}"
+metrics_dir="${VULJIT_METRICS_DIR:-${vuljit_dir}/datasets/metric_inputs}"
 
 mkdir -p "${metrics_dir}" || true
 

@@ -35,7 +35,7 @@ vuljit_dir="$(cd "$script_dir/../.." && pwd)"
 PYTHON_SCRIPT="${script_dir}/vccfinder_commit_message_metrics.py"
 
 # 処理対象のファイルが含まれるベースディレクトリ（環境変数で上書き可）
-SEARCH_BASE_DIR="${VULJIT_OUTPUT_DIR:-${vuljit_dir}/data/metrics_output}"
+SEARCH_BASE_DIR="${VULJIT_OUTPUT_DIR:-${vuljit_dir}/datasets/metric_inputs}"
 
 # プロジェクトリストファイル（このディレクトリ配下）
 PROJECT_LIST_FILE="${script_dir}/project_dir.txt"

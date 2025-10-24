@@ -67,13 +67,13 @@ RANDOM_BASELINE_STRATEGY = 'stratified'
 # このパスはご自身の環境に合わせて変更してください
 # 環境変数で上書き: VULJIT_BASE_DATA_DIR, VULJIT_RESULTS_DIR
 _here = os.path.dirname(os.path.abspath(__file__))
-_repo_root = os.path.abspath(os.path.join(_here, '..'))
-BASE_DATA_DIRECTORY = os.getenv('VULJIT_BASE_DATA_DIR', os.path.join(_repo_root, 'data'))
+_repo_root = os.path.abspath(os.path.join(_here, '..', '..'))
+BASE_DATA_DIRECTORY = os.getenv('VULJIT_BASE_DATA_DIR', os.path.join(_repo_root, 'datasets'))
 
 # 既定の結果出力ルート（モデル共通の親ディレクトリ）
-_RESULTS_PARENT_DIR = os.getenv('VULJIT_RESULTS_DIR', os.path.join(_repo_root, 'outputs', 'results'))
+_RESULTS_PARENT_DIR = os.getenv('VULJIT_RESULTS_DIR', os.path.join(_repo_root, 'datasets', 'model_outputs'))
 
-# モデルごとに保存ディレクトリを分ける（例: outputs/results/random_forest/...）
+# モデルごとに保存ディレクトリを分ける（例: datasets/model_outputs/random_forest/...）
 _MODEL_NAME_SAFE = (SELECTED_MODEL or 'model').strip().lower().replace(' ', '_')
 RESULTS_BASE_DIRECTORY = os.path.join(_RESULTS_PARENT_DIR, _MODEL_NAME_SAFE)
 

@@ -9,9 +9,9 @@ and copy those project directories to a destination, preserving structure.
 - Falls back to counting positive rows when no date column is available.
 -
 Usage example:
-  python vuljit/prediction/select_top_projects_by_isvcc.py \
-    --base-dir /work/riku-ka/vuljit/data \
-    --out-dir /work/riku-ka/vuljit/data_top10_isvcc \
+  python vuljit/scripts/modeling/select_top_projects_by_isvcc.py \
+    --base-dir /work/riku-ka/vuljit/datasets/raw \
+    --out-dir /work/riku-ka/vuljit/datasets/derived_artifacts/top_projects \
     --top 10
 
 Notes:
@@ -147,7 +147,7 @@ def copy_project_tree(src_dir: str, dst_dir: str, overwrite: bool = False):
 
 def main():
     ap = argparse.ArgumentParser(description="Select top-N projects by is_vcc-positive days and copy them.")
-    ap.add_argument("--base-dir", default="./data", help="プロジェクトごとのデータが入ったベースディレクトリ")
+    ap.add_argument("--base-dir", default="./datasets/raw", help="プロジェクトごとのデータが入ったベースディレクトリ")
     ap.add_argument("--out-dir", required=True, help="上位N件のプロジェクトを保存する出力ディレクトリ")
     ap.add_argument("--top", type=int, default=10, help="選抜するプロジェクト数（上位N件）")
     ap.add_argument("--overwrite", action="store_true", help="出力先に既存ディレクトリがある場合は削除して上書き")
@@ -208,4 +208,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
