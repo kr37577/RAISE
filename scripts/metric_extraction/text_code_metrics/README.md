@@ -1,4 +1,4 @@
-# metrics_culculator/ex1
+# scripts/metric_extraction/text_code_metrics
 
 このディレクトリはコミットメトリクス抽出とテキスト系特徴量生成の補助スクリプト群を含みます。
 ここにある主要スクリプトと役割は以下の通りです。
@@ -53,13 +53,13 @@ setenv NUMEXPR_NUM_THREADS 1
 setenv PYTHONHASHSEED 0
 setenv OMP_NUM_THREADS 1
 # 仮想環境の python を使う場合
-/work/riku-ka/.pyenv/versions/py3/bin/python /work/riku-ka/metrics_culculator/ex1/vccfinder_commit_message_metrics.py -p arrow
+/work/riku-ka/.pyenv/versions/py3/bin/python /work/riku-ka/vuljit/scripts/metric_extraction/text_code_metrics/vccfinder_commit_message_metrics.py -p arrow
 ```
 
 SLURMでバッチ実行:
 
 ```csh
-sbatch /work/riku-ka/metrics_culculator/ex1/ex2.sh
+sbatch /work/riku-ka/vuljit/scripts/metric_extraction/text_code_metrics/ex2.sh
 ```
 
 ## 補足・注意

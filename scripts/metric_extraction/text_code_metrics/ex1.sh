@@ -21,10 +21,10 @@ PYENV_ENV_NAME="py3"
 PYTHON_EXEC="${PYENV_ROOT}/versions/${PYENV_ENV_NAME}/bin/python"
 
 
-PYTHON_SCRIPT_PATH_1="ex1/repo_commit_processor_test.py"
-PYTHON_SCRIPT_PATH_2="ex1/text_metrics_calculator.py"
-PYTHON_SCRIPT_PATH_3="ex1/text_raw_convert_metrics.py"
-PYTHON_SCRIPT_VULN_LABELER="ex1/label.py" 
+PYTHON_SCRIPT_PATH_1="text_code_metrics/repo_commit_processor_test.py"
+PYTHON_SCRIPT_PATH_2="text_code_metrics/text_metrics_calculator.py"
+PYTHON_SCRIPT_PATH_3="text_code_metrics/text_raw_convert_metrics.py"
+PYTHON_SCRIPT_VULN_LABELER="text_code_metrics/label.py" 
 
 count=1
 while IFS= read -r repo_identifier; do # projects.txt から読み込むのは GitHub上の識別子 (例: owner/repo)

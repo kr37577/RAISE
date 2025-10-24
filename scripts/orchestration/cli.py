@@ -83,8 +83,9 @@ def cmd_download_coverage(args: argparse.Namespace) -> int:
 
 def cmd_extract_metrics(args: argparse.Namespace) -> int:
     root = _repo_root()
+    scripts_root = os.path.abspath(os.path.join(root, '..'))
     # Use existing shell wrapper for compatibility
-    sh = os.path.join(root, 'metrics_extraction', 'collect_metrics_from_github_project.sh')
+    sh = os.path.join(scripts_root, 'metric_extraction', 'collect_metrics_from_github_project.sh')
     env = os.environ.copy()
     if args.metrics_dir:
         env['VULJIT_METRICS_DIR'] = args.metrics_dir
@@ -136,10 +137,12 @@ def cmd_metrics_code_text(args: argparse.Namespace) -> int:
 
 def cmd_metrics_patch_coverage(args: argparse.Namespace) -> int:
     root = _repo_root()
-    step1 = os.path.join(root, 'metrics_extraction', 'patch_coverage_extract', 'create_project_csvs_from_srcmap.py')
-    step2 = os.path.join(root, 'metrics_extraction', 'patch_coverage_extract', 'revision_with_date.py')
-    step3 = os.path.join(root, 'metrics_extraction', 'patch_coverage_extract', 'create_daily_diff.py')
-    step4 = os.path.join(root, 'metrics_extraction', 'patch_coverage_extract', 'calculate_patch_coverage_per_project_test.py')
+    scripts_root = os.path.abspath(os.path.join(root, '..'))
+    metric_root = os.path.join(scripts_root, 'metric_extraction')
+    step1 = os.path.join(metric_root, 'patch_coverage_pipeline', 'create_project_csvs_from_srcmap.py')
+    step2 = os.path.join(metric_root, 'patch_coverage_pipeline', 'revision_with_date.py')
+    step3 = os.path.join(metric_root, 'patch_coverage_pipeline', 'create_daily_diff.py')
+    step4 = os.path.join(metric_root, 'patch_coverage_pipeline', 'calculate_patch_coverage_per_project_test.py')
 
     src_root = args.src or os.environ.get('VULJIT_SRCDOWN_DIR') or os.path.join(root, 'data', 'srcmap_json')
     inter_dir = args.intermediate or os.environ.get('VULJIT_INTERMEDIATE_DIR') or os.path.join(root, 'data', 'intermediate')
@@ -187,7 +190,8 @@ def cmd_metrics_patch_coverage(args: argparse.Namespace) -> int:
 
 def cmd_metrics_coverage_aggregate(args: argparse.Namespace) -> int:
     root = _repo_root()
-    script = os.path.join(root, 'metrics_extraction', 'coverage_analyze', 'process_coverage_project.py')
+    scripts_root = os.path.abspath(os.path.join(root, '..'))
+    script = os.path.join(scripts_root, 'metric_extraction', 'coverage_aggregation', 'process_coverage_project.py')
     coverage_root = args.src or os.environ.get('VULJIT_COVERAGE_DIR') or os.path.join(root, 'data', 'coverage_gz')
     out_root = args.out or os.path.join(os.environ.get('VULJIT_OUTPUTS_DIR', os.path.join(root, 'outputs')), 'metrics', 'coverage_aggregate')
     _ensure_dirs(out_root)

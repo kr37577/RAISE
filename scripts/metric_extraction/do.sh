@@ -16,6 +16,6 @@ mkdir -p errors
 mkdir -p logs
 
 
-bash ex1/ex1.sh $SLURM_ARRAY_TASK_ID
-bash /work/riku-ka/metrics_culculator/ex1/ex2.sh
-bash /work/riku-ka/metrics_culculator/collect_metrics_from_github_project.sh
+bash text_code_metrics/ex1.sh $SLURM_ARRAY_TASK_ID
+bash text_code_metrics/ex2.sh
+bash collect_metrics_from_github_project.sh

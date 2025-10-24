@@ -133,7 +133,7 @@ if __name__ == "__main__":
     here = Path(__file__).resolve()
     repo_root = here.parents[1]  # vuljit/
     default_csv = os.environ.get('VULJIT_VUL_CSV', str(repo_root / 'rq3_dataset' / 'oss_fuzz_vulns_2025802.csv'))
-    default_out = os.environ.get('VULJIT_PROJECTS_TXT', str(repo_root / 'metrics_extraction' / 'projects.txt'))
+    default_out = os.environ.get('VULJIT_PROJECTS_TXT', str(repo_root / 'metric_extraction' / 'projects.txt'))
     parser.add_argument('--csv', default=default_csv, help='入力CSVパス（repo,introduced_commits列を含む）')
     parser.add_argument('--out', default=default_out, help='出力テキストファイルパス')
     args = parser.parse_args()
