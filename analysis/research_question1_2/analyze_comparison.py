@@ -26,10 +26,13 @@ COLOR_PALETTE = {
 # 比較したいモデルのデータが格納されているベースディレクトリを辞書で設定します。
 # キー: モデル名 (グラフの凡例などで使用)
 # バリュー: 対応する結果が格納されているディレクトリのパス
+REPO_ROOT = Path(__file__).resolve().parents[3]
+RESULTS_ROOT = REPO_ROOT / "datasets" / "derived_artifacts" / "results_old"
+
 BASE_DIRS = {
-    "XGBoost": Path("/work/riku-ka/vuljit/test_data/VIC_10/outputs/results/xgboost"),
-    "RandomForest": Path("/work/riku-ka/vuljit/test_data/VIC_10/outputs/results/random_forest"),
-    "Random": Path("/work/riku-ka/vuljit/test_data/VIC_10/outputs/results/random")
+    "XGBoost": RESULTS_ROOT / "xgboost",
+    "RandomForest": RESULTS_ROOT / "random_forest",
+    "Random": RESULTS_ROOT / "random",
 }
 
 
@@ -320,7 +323,7 @@ def main():
     parser.add_argument('--plot-positives-top', action='store_true', help='陽性上位N件の棒グラフも保存する')
     args = parser.parse_args()
     
-    output_summary_dir = Path("./evaluation_summary_comparison")
+    output_summary_dir = REPO_ROOT / "datasets" / "derived_artifacts" / "rq1_rq2" / "evaluation_summary_comparison"
     output_summary_dir.mkdir(exist_ok=True)
     print(f"✅ Aggregated results will be saved to: {output_summary_dir.resolve()}")
 

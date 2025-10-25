@@ -6,12 +6,15 @@ and the detection time table extracted from OSS-Fuzz metadata. Each strategy
 emits a per-project schedule that can be consumed by the additional-build
 simulation framework.
 
-Inputs (default locations are relative to this file):
-- `../timeline_outputs/build_timelines/*.csv` for daily build timelines.
-- `../rq3_dataset/detection_time_results.csv` for commit/detection intervals.
-- `../rq3_dataset/project_build_counts.csv` for baseline build frequency.
-- `../data/<project>/<project>_daily_aggregated_metrics.csv` for daily code
-  churn metrics (used by strategies 3 and 4).
+Inputs (default locations resolve via :mod:`RQ3.core.io.DEFAULTS`):
+- ``datasets/derived_artifacts/rq3/timeline_outputs/build_timelines/*.csv`` for
+  daily build timelines.
+- ``datasets/raw/rq3_dataset/detection_time_results.csv`` for commit/detection
+  intervals.
+- ``datasets/raw/rq3_dataset/project_build_counts.csv`` for baseline build
+  frequency.
+- ``datasets/derived_artifacts/<project>/<project>_daily_aggregated_metrics.csv``
+  for daily code churn metrics (used by strategies 3 and 4).
 """
 
 from __future__ import annotations

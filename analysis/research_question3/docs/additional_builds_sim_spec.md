@@ -1,6 +1,6 @@
 # additional_builds_cli.py 関数仕様メモ
 
-この文書は `vuljit/RQ3/cli/additional_builds_cli.py` 内の主要関数について、目的・入出力・内部ロジック・エッジケースを整理したものです。追加ビルドシミュレーションを拡張／改修する際のリファレンスとして利用できます。
+この文書は `vuljit/analysis/research_question3/cli/additional_builds_cli.py` 内の主要関数について、目的・入出力・内部ロジック・エッジケースを整理したものです。追加ビルドシミュレーションを拡張／改修する際のリファレンスとして利用できます。
 
 ## `_ensure_directory(path: str) -> str`
 - **目的**: 出力先のディレクトリが存在することを保証し、作成後のパスを返す。

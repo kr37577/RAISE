@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # --- 設定 ---
-csv_path = "/work/riku-ka/vuljit/rq3_dataset/oss_fuzz_vulns_2025802.csv"          # 入力CSV
+csv_path = "/work/riku-ka/vuljit/datasets/raw/rq3_dataset/oss_fuzz_vulns_2025802.csv"          # 入力CSV
 date_col = "published"         # 期間判定に使う日付カラム（"published" や "modified" に変更可）
 project_col = "package_name"   # 「プロジェクト」と見なすカラム（"repo" にすることも可）
 start = "2018-10-12"

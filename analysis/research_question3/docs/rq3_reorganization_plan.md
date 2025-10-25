@@ -4,7 +4,7 @@
 フェーズ 3〜5 のシミュレーション関連ロジックを責務ごとに分割し、再利用性・テスト容易性・CLI の一貫性を高める。現状の `simulate_additional_builds.py` / `minimal_simulation_wrapper.py` に加え、`threshold_precision_analysis.py` や `timeline_cli_wrapper.py` でもデータ入出力や戦略呼び出しが重複しているため、共通の `core` 層を整備し CLI/分析用スクリプトから再利用する構成へ移行する。
 
 ```
-RQ3/
+analysis/research_question3/
   core/
     __init__.py
     io.py             # ファイル入出力・パス解決・デフォルト設定
@@ -28,14 +28,14 @@ RQ3/
 ## 前提確認
 - `core/` ディレクトリは既に存在し空。`__init__.py` で段階的にエクスポートを整理する。
 - `additional_build_strategies.py` は戦略実装のソースとして存続させ、呼び出しは `core.scheduling` 経由に切り替える。
-- CLI スクリプトは最終的に `python -m RQ3.cli.additional_builds_cli` のようにモジュール呼び出しできる構成へ統一する。
+- CLI スクリプトは最終的に `python -m analysis.research_question3.cli.additional_builds_cli` のようにモジュール呼び出しできる構成へ統一する。
 
 ## 作業ステップ
 
 ### フェーズ 0: 足回りの整備（完了）
-- [✅] `RQ3/core/__init__.py` を作成し、主要ファサード関数を公開する準備をする。
-- [✅] `RQ3/cli/` ディレクトリを新設。
-- [✅] 将来的に `RQ3/data/` を利用する場合に備え、ディレクトリのみ作成（必要であれば `.gitkeep` を配置）。
+- [✅] `analysis/research_question3/core/__init__.py` を作成し、主要ファサード関数を公開する準備をする。
+- [✅] `analysis/research_question3/cli/` ディレクトリを新設。
+- [✅] 将来的に `analysis/research_question3/data/` を利用する場合に備え、ディレクトリのみ作成（必要であれば `.gitkeep` を配置）。
 
 ### フェーズ 1: 共通入出力レイヤーの抽出
 - [✅] `simulate_additional_builds.py` / `minimal_simulation_wrapper.py` / `threshold_precision_analysis.py` / `timeline_cli_wrapper.py` から重複する `_ensure_directory`, `_load_detection_table`, `_load_build_counts`, `_parse_build_counts`, `_iter_prediction_files` などを `core/io.py` と `core/predictions.py` に分離する。
@@ -69,7 +69,7 @@ RQ3/
 
 ### フェーズ 6: 既存コードの移行調整
 - [✅] `additional_build_strategies.py` 内で `os.path` やファイル読み込み処理が残っている場合は `core.io` / `core.predictions` の関数を参照するように置換し、重複ロジックを削減する。
-- [✅] 各 CLI からのインポートを相対パス（`from RQ3.core import simulation` 等）に統一し、`try/except ImportError` ブロックは極力削除する。
+- [✅] 各 CLI からのインポートを相対パス（`from analysis.research_question3.core import simulation` 等）に統一し、`try/except ImportError` ブロックは極力削除する。
 - [✅] `DEFAULT_*` 定数参照箇所をすべて `core.io.DEFAULTS[...]` へのアクセスに切り替える。
 
 ### フェーズ 7: テストと検証
@@ -80,16 +80,16 @@ RQ3/
   - [✅] `core.io`, `core.baseline`, `core.metrics`, `core.simulation`, `core.timeline`, `core.plotting`, `core.predictions`, `core.scheduling` それぞれについて、成功パス・異常系（ファイル欠損、値の欠落、Matplotlib 非導入など）を検証するテストを作成し、関数名毎にカバレッジを確保する。
   - [✅] `SimulationResult` の直列化（`dict()` 変換や空スケジュール）など境界ケースを `tests/test_core_simulation_run.py` に追加する。
 - **CLI スモークテスト**
-  - [✅] `python -m RQ3.cli.additional_builds_cli` / `minimal_simulation_cli` / `phase4_main` / `build_timeline_cli` を PyTest から `subprocess` で起動し、`tmp_path` に成果物（CSV / PNG）が生成されること、異常パラメータで適切に失敗することを確認する。
+  - [✅] `python -m analysis.research_question3.cli.additional_builds_cli` / `minimal_simulation_cli` / `phase4_main` / `build_timeline_cli` を PyTest から `subprocess` で起動し、`tmp_path` に成果物（CSV / PNG）が生成されること、異常パラメータで適切に失敗することを確認する。
   - [✅] CLI 実行時に実データへアクセスしないよう、全入出力をフィクスチャで差し替えるモック層を整備する（例: `monkeypatch` で `run_minimal_simulation` や `collect_predictions` を置換）。
 - **統合テスト / 回帰検証**
-  - [✅] フェーズ 5 完全フロー用の縮小データセット（数件のプロジェクトと日付）を用意し、`python -m RQ3.cli.additional_builds_cli` を実行して生成された CSV の主要列を Snapshot テストで検証する。
+  - [✅] フェーズ 5 完全フロー用の縮小データセット（数件のプロジェクトと日付）を用意し、`python -m analysis.research_question3.cli.additional_builds_cli` を実行して生成された CSV の主要列を Snapshot テストで検証する。
   - [✅] フェーズ 4 精度曲線出力についても同様の縮小データで回帰テストを追加し、主な統計値（閾値・precision/recall）が既知の値と一致することを確認する。
 
 
 ### フェーズ 8: ドキュメントと設定反映
 - [ ] `docs/` 内の仕様書（例: `additional_builds_sim_spec.md`）や README の import 例を新パッケージ構成に合わせて更新する。
-- [ ] `setup.cfg` / `pyproject.toml` が存在する場合は `RQ3.core` / `RQ3.cli` をパッケージとして認識させる設定（`packages = find:` など）を確認・修正する。
+- [ ] `setup.cfg` / `pyproject.toml` が存在する場合は `analysis.research_question3.core` / `analysis.research_question3.cli` をパッケージとして認識させる設定（`packages = find:` など）を確認・修正する。
 - [ ] 不要になったバックアップスクリプトを整理し、`legacy_snapshots/` の取り扱い方針を決定する。
 
 ## リスクと検討事項

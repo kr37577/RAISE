@@ -5,7 +5,6 @@ import os
 # 環境変数で上書き可能にして再現パッケージから制御しやすくする
 RANDOM_STATE = int(os.getenv('VULJIT_RANDOM_STATE', '42'))
 N_SPLITS_K = int(os.getenv('VULJIT_N_SPLITS_K', '10'))  # 10分割交差検証
-# TODO: 30回が本番
 N_REPETITIONS = int(os.getenv('VULJIT_N_REPETITIONS', '30'))  # 評価サイクルの繰り返し回数
 
 # 予測確率を二値に変換する際の既定閾値（CSV出力用）

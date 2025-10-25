@@ -13,25 +13,30 @@ PathLike = Union[str, os.PathLike]
 _CORE_DIR = Path(__file__).resolve().parent
 _RQ3_ROOT = _CORE_DIR.parent
 _REPO_ROOT = _RQ3_ROOT.parent
+_DATASETS_ROOT = _REPO_ROOT / "datasets"
+_RAW_DATA_ROOT = _DATASETS_ROOT / "raw"
+_DERIVED_DATA_ROOT = _DATASETS_ROOT / "derived_artifacts"
+_MODEL_OUTPUTS_ROOT = _DATASETS_ROOT / "model_outputs"
+_RQ3_DERIVED_ROOT = _DERIVED_DATA_ROOT / "rq3"
 
 # Centralised defaults used by the phase4/phase5 CLI scripts and utilities.
 DEFAULTS: MutableMapping[str, Any] = {
     # Additional-build simulation defaults
-    "phase5.output_dir": _RQ3_ROOT / "simulation_outputs",
-    "phase5.predictions_root": _REPO_ROOT / "outputs" / "results" / "random_forest",
-    "phase5.detection_table": _REPO_ROOT / "rq3_dataset" / "detection_time_results.csv",
-    "phase5.build_counts": _REPO_ROOT / "rq3_dataset" / "project_build_counts.csv",
+    "phase5.output_dir": _RQ3_DERIVED_ROOT / "simulation_outputs",
+    "phase5.predictions_root": _MODEL_OUTPUTS_ROOT / "random_forest",
+    "phase5.detection_table": _RAW_DATA_ROOT / "rq3_dataset" / "detection_time_results.csv",
+    "phase5.build_counts": _RAW_DATA_ROOT / "rq3_dataset" / "project_build_counts.csv",
     "phase5.detection_window_days": 0,
     # Minimal additional-build simulation defaults
-    "phase5_minimal.output": _RQ3_ROOT / "minimal_simulation_summary.csv",
-    "phase5_minimal.predictions_root": _REPO_ROOT / "outputs" / "results" / "random_forest",
+    "phase5_minimal.output": _RQ3_DERIVED_ROOT / "minimal_simulation_summary.csv",
+    "phase5_minimal.predictions_root": _MODEL_OUTPUTS_ROOT / "random_forest",
     # Phase 4 analysis defaults
-    "phase4.output_dir": _RQ3_ROOT / "phase4_outputs",
-    "phase4.predictions_root": _REPO_ROOT / "outputs" / "results" / "random_forest",
+    "phase4.output_dir": _RQ3_DERIVED_ROOT / "phase4_outputs",
+    "phase4.predictions_root": _MODEL_OUTPUTS_ROOT / "random_forest",
     # Build timeline defaults
-    "timeline.data_dir": _REPO_ROOT / "data",
-    "timeline.build_counts": _REPO_ROOT / "rq3_dataset" / "project_build_counts.csv",
-    "timeline.output_dir": _RQ3_ROOT / "timeline_outputs" / "build_timelines",
+    "timeline.data_dir": _DERIVED_DATA_ROOT,
+    "timeline.build_counts": _RAW_DATA_ROOT / "rq3_dataset" / "project_build_counts.csv",
+    "timeline.output_dir": _RQ3_DERIVED_ROOT / "timeline_outputs" / "build_timelines",
     "timeline.default_builds_per_day": 1,
 }
 

@@ -9,7 +9,8 @@ from pathlib import Path
 import pandas as pd
 
 
-DEFAULT_INPUT = Path(__file__).resolve().parents[1] / "simulation_outputs" / "strategy_wasted_builds.csv"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_INPUT = REPO_ROOT / "datasets" / "derived_artifacts" / "rq3" / "simulation_outputs" / "strategy_wasted_builds.csv"
 
 STRATEGY_LABELS = {
     "strategy1_median": "S1 Median",

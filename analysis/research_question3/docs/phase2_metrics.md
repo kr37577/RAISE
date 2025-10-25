@@ -1,8 +1,8 @@
 # フェーズ2 指標定義と閾値調整メモ
 
 ## 1. ビルド履歴整形スクリプト
-- 実装場所: `vuljit/RQ3/build_timeline.py`。`project_build_counts.csv`（`vuljit/rq3_dataset/`）と `vuljit/data/<project>/<project>_daily_aggregated_metrics.csv` を入力に、時系列ごとのビルド番号と推定 fuzzing 実行回数を生成。
-- 使用例: `python3 vuljit/RQ3/build_timeline.py --output-dir <out_dir> --fuzzing-multiplier 1.0`。出力はプロジェクトごとの `*_build_timeline.csv` と総括 `projects_summary.csv`。
+- 実装場所: `vuljit/analysis/research_question3/timeline_cli_wrapper.py`。`project_build_counts.csv`（`vuljit/datasets/raw/rq3_dataset/`）と `vuljit/datasets/derived_artifacts/<project>/<project>_daily_aggregated_metrics.csv` を入力に、時系列ごとのビルド番号と推定 fuzzing 実行回数を生成。
+- 使用例: `python3 vuljit/analysis/research_question3/timeline_cli_wrapper.py --output-dir <out_dir> --fuzzing-multiplier 1.0`。出力はプロジェクトごとの `*_build_timeline.csv` と総括 `projects_summary.csv`。
 - 出力カラム:
   - `build_index_start` / `build_index_end`: 当日ビルドの連番範囲。
   - `cumulative_builds`: 初日からの累積ビルド数。
@@ -29,7 +29,7 @@
   - 基準 `B_{p}^{\text{baseline}}` は `project_build_counts.csv` の `builds_per_day` と観測期間から算出（フェーズ5で活用）。
 
 ## 3. Precision ベースの閾値調整手順
-1. **予測確率の取得**: `vuljit/outputs/results/<model>/<project>/<project>_daily_aggregated_metrics_with_predictions.csv` から対象実験（例: `predicted_risk_VCCFinder_Coverage`）の確率列を抽出。欠損は除去。
+1. **予測確率の取得**: `vuljit/datasets/model_outputs/<model>/<project>/<project>_daily_aggregated_metrics_with_predictions.csv` から対象実験（例: `predicted_risk_VCCFinder_Coverage`）の確率列を抽出。欠損は除去。
 2. **ラベル整合**: 同じ CSV の `predicted_label_*` 列では暫定閾値 0.5 を用いている。`is_vcc` と併せて、PR カーブ計算用の `(y_true, y_score)` ペアを作成。
 3. **PR カーブ算出**: `precision_recall_curve(y_true, y_score)` で全候補閾値をスキャンし、Precision が目標値 `P^*` を上回る最小閾値 `\tau(P^*)` を選択。
 4. **安定化**: 複数繰り返し `exp*_per_fold_metrics.csv` がある場合は fold ごとに `\tau(P^*)` を算出して中央値を採用。

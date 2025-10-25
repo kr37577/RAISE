@@ -9,7 +9,7 @@
 1. 仮想環境を有効化し、`requirements.txt` に記載のライブラリ（特に `pandas`, `pytest`）をインストールする。
 2. ルートを `vuljit` とした上で、以下を実行する：
    ```bash
-   PYTHONPATH=. pytest RQ3/tests/test_core_simulation_run.py
+   PYTHONPATH=. pytest analysis/research_question3/tests/test_core_simulation_run.py
    ```
 3. `tests/test_core_simulation_run.py` では以下を検証している：
    - `_build_threshold_map` が推定ビルド番号を優先し、欠損時は `baseline_detection_builds` や日数ベースのフォールバックを採用すること。
@@ -17,10 +17,10 @@
 
 ## 3. 分析フロー概要
 1. **Phase 4（`threshold_precision_analysis.py`）**
-   - Precision/Recall 曲線を算出し、精度ターゲットごとのリスク閾値を `phase4_outputs/precision_thresholds.csv` に保存。
+   - Precision/Recall 曲線を算出し、精度ターゲットごとのリスク閾値を `datasets/derived_artifacts/rq3/phase4_outputs/precision_thresholds.csv` に保存。
    - `strategy_precision_sweep.csv` で各戦略の追加ビルド量を比較。
 2. **追加ビルドシミュレーション（`cli/additional_builds_cli.py`）**
-   - 固定閾値で全戦略を再生し、`simulation_outputs/` 配下に以下を出力：
+   - 固定閾値で全戦略を再生し、`datasets/derived_artifacts/rq3/simulation_outputs/` 配下に以下を出力：
      - `strategy_summary.csv`（全体指標）
      - `strategy_project_metrics.csv`（プロジェクト別集計）
      - `strategy_overall_metrics.csv`（戦略別の平均・中央値）

@@ -6,14 +6,14 @@
 - [ ] 変更後の挙動を再現性のある実験と指標で評価し、改善効果を記録する。
 
 ## テスト計画
-- [x] `vuljit/RQ3/tests/test_additional_build_strategies.py` に窓幅変更時の baseline 決定を検証するケースを追加する。
+- [x] `vuljit/analysis/research_question3/tests/test_additional_build_strategies.py` に窓幅変更時の baseline 決定を検証するケースを追加する。
 - [x] 同テストへ丸めモードと Fold 超過調整の挙動を確認するケースを追加する。
 - [x] Fold 予算整合性とメタデータ列（`fold_budget`, `fold_budget_source` など）の一貫性を検証するアサーションを追加する。
 - [x] Fold→プロジェクト→グローバルのフォールバック経路を WalkForward 割当モックで再現する追加テストを設計する。
 - [x] 予算超過時の減算ロジックと Fold 未達時のレポート出力を検証する回帰テストを作成し、既存スナップショットとの差分を確認する。
 
 ## 対象コード
-- [x] `vuljit/RQ3/additional_build_strategies.py:870-951` の改修対象を精査する。
+- [x] `vuljit/analysis/research_question3/additional_build_strategies.py:870-951` の改修対象を精査する。
 - [x] `_prepare_line_change_metrics`（同ファイル:210-221）と `_prepare_labelled_timeline`（同ファイル:468-560）の依存を確認する。
 
 ## 修正方針
@@ -57,7 +57,7 @@
 - [ ] 入力データのバージョンとコミットハッシュを記録し、再現性メモを整備する。
 
 ## ドキュメント更新
-- [ ] `vuljit/RQ3/docs/additional_build_strategies_detail.md` へ Strategy3 の処理詳細・選定値・評価結果を追記する。
+- [ ] `vuljit/analysis/research_question3/docs/additional_build_strategies_detail.md` へ Strategy3 の処理詳細・選定値・評価結果を追記する。
 - [ ] `docs/reports/strategy3_rework_results.md` を作成し、評価レポートをまとめる。
 
 ## リスクと課題

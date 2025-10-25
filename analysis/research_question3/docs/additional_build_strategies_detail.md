@@ -1,14 +1,14 @@
 # 追加ビルド戦略の詳細まとめ
 
-本ドキュメントでは `vuljit/RQ3/additional_build_strategies.py` に実装されている追加ビルド戦略と、その前提となるヘルパー処理について日本語で解説します。OSS-Fuzz のタイムラインや WalkForward 学習設定に基づき、JIT 予測結果から追加ビルドの配分量を算出する仕組みを理解するための参考資料です。
+本ドキュメントでは `vuljit/analysis/research_question3/additional_build_strategies.py` に実装されている追加ビルド戦略と、その前提となるヘルパー処理について日本語で解説します。OSS-Fuzz のタイムラインや WalkForward 学習設定に基づき、JIT 予測結果から追加ビルドの配分量を算出する仕組みを理解するための参考資料です。
 
 ---
 
 ## 1. 入力データと共通ヘルパー
 
 ### 1.1 主要データソース
-- **ビルドタイムライン**：`timeline_outputs/build_timelines/*.csv`。1 日単位の追加ビルド候補を保持し、`merge_date_ts`・`day_index`・`builds_per_day` などを含みます。
-- **検出遅延テーブル**：`rq3_dataset/detection_time_results.csv`。脆弱性コミットの検出遅延（`detection_time_days`）を持つ基礎データです。
+- **ビルドタイムライン**：`datasets/derived_artifacts/rq3/timeline_outputs/build_timelines/*.csv`。1 日単位の追加ビルド候補を保持し、`merge_date_ts`・`day_index`・`builds_per_day` などを含みます。
+- **検出遅延テーブル**：`datasets/raw/rq3_dataset/detection_time_results.csv`。脆弱性コミットの検出遅延（`detection_time_days`）を持つ基礎データです。
 - **予測 CSV**：`*_daily_aggregated_metrics_with_predictions.csv`。WalkForward 学習設定（分割数・訓練ウィンドウ）と一貫させるため、ここから Fold 情報を構築します。
 
 ### 1.2 WalkForward メタデータ生成
@@ -64,7 +64,7 @@
 ### 2.3 Strategy 3: `strategy3_line_change_proportional`
 **目的**：日次のコード変更量に比例させて追加ビルド数を変動させる（ラベルが陽性の日のみ計画を生成）。
 
-- `vuljit/RQ3/additional_build_strategies.py:870-884`  
+- `vuljit/analysis/research_question3/additional_build_strategies.py:870-884`  
   戦略関数の定義。タイムライン・メトリクス・予測 CSV のパスを解決し、結果行を格納する `rows` を初期化。
 - `:887-892`  
   プロジェクトごとにタイムラインを走査し、空タイムラインを除外。`_prepare_line_change_metrics` で日次メトリクス（`lines_added`/`lines_deleted`）を読み込み、`line_change_total` 列を生成。
@@ -128,7 +128,7 @@
 
 ## 5. 参考：関連テスト
 
-- `tests/test_additional_build_strategies.py` には各戦略と `_compute_project_fold_statistics` の挙動を検証するテストが実装されています。Fold メタデータの統合やフォールバック優先順位、決定論的乱数など重要な性質を確認する際の参考になります。
+- `analysis/research_question3/tests/test_additional_build_strategies.py` には各戦略と `_compute_project_fold_statistics` の挙動を検証するテストが実装されています。Fold メタデータの統合やフォールバック優先順位、決定論的乱数など重要な性質を確認する際の参考になります。
 
 ---
 

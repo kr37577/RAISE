@@ -5,7 +5,7 @@ This script derives precision/recall curves for the JIT prediction outputs,
 maps desired precision targets to risk score thresholds, and evaluates the
 additional-build strategies under those thresholds to quantify added build load
 and proxy detection speed measures.  The outputs are written to
-`phase4_outputs/` in CSV/Markdown formats for inspection in later phases.
+`datasets/derived_artifacts/rq3/phase4_outputs/` in CSV/Markdown formats for inspection in later phases.
 """
 
 from __future__ import annotations

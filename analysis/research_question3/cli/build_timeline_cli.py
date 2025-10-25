@@ -46,12 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         default=resolve_default("timeline.data_dir"),
-        help="Directory containing <project>/<project>_daily_aggregated_metrics.csv files (default: ../data).",
+        help="Directory containing <project>/<project>_daily_aggregated_metrics.csv files (default: datasets/derived_artifacts).",
     )
     parser.add_argument(
         "--build-counts",
         default=resolve_default("timeline.build_counts"),
-        help="Path to project_build_counts.csv (default: ../rq3_dataset/project_build_counts.csv).",
+        help="Path to project_build_counts.csv (default: datasets/raw/rq3_dataset/project_build_counts.csv).",
     )
     parser.add_argument(
         "--output-dir",

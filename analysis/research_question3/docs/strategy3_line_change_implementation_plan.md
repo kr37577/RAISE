@@ -7,15 +7,15 @@
 
 ## 前提整理
 - 参照コード
-  - `vuljit/RQ3/additional_build_strategies.py`
-  - `vuljit/RQ3/tests/test_additional_build_strategies.py`
+  - `vuljit/analysis/research_question3/additional_build_strategies.py`
+  - `vuljit/analysis/research_question3/tests/test_additional_build_strategies.py`
   - Fold メタデータ生成ヘルパー群（`_get_project_walkforward_metadata`, `_compute_project_fold_statistics`）
 - 参照データ
   - WalkForward 予測結果（`predicted_*` シリーズ）
   - ラインチャーン集計（`_prepare_line_change_metrics`）
   - オプションの補助列（`daily_commit_count`, `builds_per_day`）
 - 既存ドキュメント
-  - `vuljit/RQ3/docs/strategy3_line_change_rework_plan.md`（仕様方針）
+  - `vuljit/analysis/research_question3/docs/strategy3_line_change_rework_plan.md`（仕様方針）
 
 ## 実装タスク詳細
 
@@ -72,7 +72,7 @@
 4. `pytest -k strategy3` 実行でローカル確認。
 
 ### フェーズ7：評価ツール更新（0.5日）
-1. バックテストスクリプト（例：`vuljit/RQ3/scripts/` 配下）を更新し、新メタデータ列を読み込めるようにする。
+1. バックテストスクリプト（例：`vuljit/analysis/research_question3/scripts/` 配下）を更新し、新メタデータ列を読み込めるようにする。
 2. Fold 予算と割当結果の整合性をチェックする集計レポートを追加。
 3. 感度分析用のテンプレート設定（複数 `scaling_factor` や補助係数の組合せ）を準備。
 

@@ -4,13 +4,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+DATASETS_ROOT="${REPO_ROOT}/datasets"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ -n "${PYTHONPATH:-}" ]]; then
-  export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH}"
+  export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH}"
 else
-  export PYTHONPATH="${PROJECT_ROOT}"
+  export PYTHONPATH="${REPO_ROOT}"
 fi
 
 run_step() {
@@ -44,4 +45,4 @@ run_step "Generating build timelines" \
 run_step "Running additional-build simulation" \
   "${PYTHON_BIN}" "${SCRIPT_DIR}/simulate_additional_builds.py" "${SIM_ARGS[@]}"
 
-echo "RQ3 simulation completed. Outputs are available under: ${PROJECT_ROOT}/RQ3/simulation_outputs"
+echo "RQ3 simulation completed. Outputs are available under: ${DATASETS_ROOT}/derived_artifacts/rq3/simulation_outputs"
