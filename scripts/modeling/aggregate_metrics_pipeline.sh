@@ -25,12 +25,13 @@ script_dir="/work/riku-ka/vuljit/scripts/modeling"
 PYTHON_SCRIPT_PATH_1="${script_dir}/aggregate_metrics_pipeline.py"
 
 # 後で消す
-VULJIT_BASE_DATA_DIR='/work/riku-ka/vuljit/datasets/derived_artifacts'
+VULJIT_BASE_DATA_DIR='/work/riku-ka/vuljit/datasets/derived_artifacts/aggregate'
 VULJIT_PROJECT_MAPPING='/work/riku-ka/vuljit/datasets/reference_mappings/filtered_project_mapping.csv'
 
 # ログ用、エラー用ディレクトリ作成
 mkdir -p errors
 mkdir -p logs
+mkdir -p "${VULJIT_BASE_DATA_DIR}"
 
 
 echo "====== Starting Slurm Task ${SLURM_ARRAY_TASK_ID} ======"
@@ -65,7 +66,7 @@ ${PYTHON_EXEC} "${PYTHON_SCRIPT_PATH_1}" "${PROJECT_ID}" "${DIRECTORY_NAME}" \
   --metrics "${METRICS_BASE_PATH}" \
   --coverage "${COVERAGE_BASE_PROJECT_PATH}" \
   --patch-coverage "${PATCH_COVERAGE_BASE_PATH}" \
-  --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../../datasets/derived_artifacts}"
+  --out "${VULJIT_BASE_DATA_DIR:-${script_dir}/../../datasets/derived_artifacts/aggregate}"
 # --out "${OUTPUT_BASE_PATH}"
 
 # ${PYTHON_EXEC} "${PYTHON_SCRIPT_PATH_1}" "${PROJECT_ID}" "${DIRECTORY_NAME}" \
