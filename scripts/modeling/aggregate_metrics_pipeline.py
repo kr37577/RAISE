@@ -17,6 +17,12 @@ from settings import (
 )
 from datetime import timedelta
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+METRIC_EXTRACTION_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "metric_extraction")
+if METRIC_EXTRACTION_DIR not in sys.path:
+    sys.path.insert(0, METRIC_EXTRACTION_DIR)
+
+from text_code_metrics.vccfinder_commit_message_metrics import add_commit_tfidf
 # --- ユーティリティ ---
 
 def _parse_changed_files(cell):
@@ -451,6 +457,43 @@ def process_project_coverage(project_id,
     if result_df is None or result_df.empty:
         print(f"ℹ️  プロジェクト '{project_id}' で処理できるデータがありませんでした。")
         return
+
+    # TF-IDF を計算する前に対象コミットをカバレッジ付きに限定し、コミット時刻を正規化
+    if 'has_prev_coverage' in result_df.columns:
+        coverage_flag = (
+            pd.to_numeric(result_df['has_prev_coverage'], errors='coerce')
+            .fillna(0)
+            .astype(int)
+        )
+        coverage_commits_df = result_df[coverage_flag == 1].copy()
+        dropped_count = len(result_df) - len(coverage_commits_df)
+        if dropped_count:
+            print(f"  -> カバレッジが存在しないコミット {dropped_count} 件を TF-IDF 対象から除外しました。")
+    else:
+        coverage_commits_df = result_df.copy()
+
+    if coverage_commits_df.empty:
+        print(f"ℹ️  プロジェクト '{project_id}' はカバレッジ報告のあるコミットが無いためスキップします。")
+        return
+
+    if 'commit_datetime' in coverage_commits_df.columns:
+        dt_parsed = pd.to_datetime(
+            coverage_commits_df['commit_datetime'].astype(str).str.replace(' ', 'T', regex=False),
+            errors='coerce', utc=True
+        )
+        coverage_commits_df['commit_datetime'] = (
+            dt_parsed.dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+            .str.replace(r'([+-]\d{2})(\d{2})$', r'\1:\2', regex=True)
+        )
+
+    tfidf_cols = [col for col in coverage_commits_df.columns if col.startswith("VCC_w")]
+    if tfidf_cols:
+        coverage_commits_df = coverage_commits_df.drop(columns=tfidf_cols)
+
+    coverage_commits_df, tfidf_feature_names = add_commit_tfidf(coverage_commits_df)
+    print(f"  -> TF-IDF を {len(coverage_commits_df)} 件のコミットから再計算しました (特徴量 {len(tfidf_feature_names)} 列)。")
+
+    result_df = coverage_commits_df
 
     # --- 日毎の集約処理 ---
 

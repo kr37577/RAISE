@@ -22,6 +22,7 @@ PYTHON_EXEC="${PYENV_ROOT}/versions/${PYENV_ENV_NAME}/bin/python"
 # clusterで動かすときは絶対
 # script_dir="$(cd "$(dirname "$0")" && pwd)"
 script_dir="/work/riku-ka/vuljit/scripts/modeling"
+repo_root="$(realpath "${script_dir}/../..")"
 PYTHON_SCRIPT_PATH_1="${script_dir}/aggregate_metrics_pipeline.py"
 
 # 後で消す
@@ -50,17 +51,20 @@ fi
 echo "Processing Project: ${PROJECT_ID}, Directory: ${DIRECTORY_NAME}"
 
 
+default_coverage_dir="${repo_root}/datasets/coverage_metrics"
+
 # いったんベタ書き
 # metrics_base_path = '/work/riku-ka/metrics_culculator/output_0802'
-# coverage_base_project_path = '/work/riku-ka/metrics_culculator/coverage_zip/output_project_0802'
 # patch_coverage_base_path = '/work/riku-ka/patch_coverage_culculater/patch_coverage_results_0802_now'
 # output_base_path = '/work/riku-ka/daily_commit_summary_past_vul_0802_now' 
 
 ## いったん絶対パスでメトリクスやカバレッジを指定
 METRICS_BASE_PATH="/work/riku-ka/metrics_culculator/output_0802"
-COVERAGE_BASE_PROJECT_PATH="/work/riku-ka/metrics_culculator/coverage_zip/output_project_0802"
+COVERAGE_BASE_PROJECT_PATH="${VULJIT_COVERAGE_METRICS_DIR:-${default_coverage_dir}}"
 PATCH_COVERAGE_BASE_PATH="/work/riku-ka/patch_coverage_culculater/patch_coverage_results_0802_now"
 # OUTPUT_BASE_PATH="/work/riku-ka/daily_commit_summary_past_vul_0802_now"
+
+mkdir -p "${COVERAGE_BASE_PROJECT_PATH}"
 
 ${PYTHON_EXEC} "${PYTHON_SCRIPT_PATH_1}" "${PROJECT_ID}" "${DIRECTORY_NAME}" \
   --metrics "${METRICS_BASE_PATH}" \

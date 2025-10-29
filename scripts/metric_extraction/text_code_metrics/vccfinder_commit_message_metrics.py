@@ -2,9 +2,45 @@ import argparse
 import os
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
+from typing import Optional, Tuple, List
+
 from sklearn.feature_extraction.text import TfidfVectorizer
+
+
+def add_commit_tfidf(
+    df: pd.DataFrame,
+    *,
+    max_features: int = 10,
+    stop_words: Optional[str] = "english",
+) -> Tuple[pd.DataFrame, List[str]]:
+    """
+    コミットメッセージに TF-IDF 特徴量列を追加した DataFrame を返す。
+    """
+    if "commit_message" not in df.columns:
+        raise ValueError("DataFrame に 'commit_message' 列が存在しません。")
+
+    commit_messages = df["commit_message"].fillna("")
+    vectorizer = TfidfVectorizer(
+        encoding="utf-8",
+        min_df=0.0,
+        analyzer="word",
+        tokenizer=None,
+        lowercase=True,
+        preprocessor=None,
+        stop_words=stop_words,
+        max_features=max_features,
+        use_idf=True,
+    )
+    tfidf_matrix = vectorizer.fit_transform(commit_messages)
+    feature_names = list(vectorizer.get_feature_names_out())
+    tfidf_col_names = [f"VCC_w{i+1}" for i in range(len(feature_names))]
+
+    tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), columns=tfidf_col_names, index=df.index)
+
+    df_with_tfidf = pd.concat([df.reset_index(drop=True), tfidf_df.reset_index(drop=True)], axis=1)
+    return df_with_tfidf, feature_names
+
 
 def calculate_tfidf_for_commits(project_name: str, metrics_base_dir: str) -> None:
     """
@@ -29,45 +65,8 @@ def calculate_tfidf_for_commits(project_name: str, metrics_base_dir: str) -> Non
         print(f"エラー: ファイルが見つかりません。パスを確認してください: {input_filepath}")
         return
 
-    # --- 3. TF-IDFの計算 ---
-    # commit_message列の欠損値(NaN)を空文字に置き換える
-    commit_messages = df['commit_message'].fillna('')
-
-    # TfidfVectorizerの初期化
-    # - stop_words='english': a, the, is などの一般的な単語を除外
-    # - max_features=10: 出現頻度が高い上位10単語のみを対象
-    vectorizer = TfidfVectorizer(
-        encoding="utf-8",
-        min_df=0.0,
-        analyzer="word",
-        tokenizer=None,
-        lowercase=True,  
-        preprocessor=None,
-        stop_words="english",
-        max_features=10,
-        use_idf=True
-    )
-
-    # TF-IDF行列を計算
-    tfidf_matrix = vectorizer.fit_transform(commit_messages)
-
-    # --- 4. 結果をDataFrameに変換 ---
-    # 特徴量名（単語）を取得
-    feature_names = vectorizer.get_feature_names_out()
-    print(f"抽出されたトップ10単語: {feature_names}")
-    
-    # 新しい列名を生成 (VCC_w1, VCC_w2, ...)
-    tfidf_col_names = [f'VCC_w{i+1}' for i in range(len(feature_names))]
-
-    # TF-IDF行列をDataFrameに変換
-    tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), columns=tfidf_col_names)
-
-    # --- 5. 元のDataFrameと結合 ---
-    # インデックスをリセットして、安全に結合できるようにする
-    df.reset_index(drop=True, inplace=True)
-    tfidf_df.reset_index(drop=True, inplace=True)
-    
-    final_df = pd.concat([df, tfidf_df], axis=1)
+    final_df, feature_names = add_commit_tfidf(df)
+    print(f"抽出されたトップ{len(feature_names)}単語: {feature_names}")
 
     # --- 6. 新しいCSVファイルとして保存 ---
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -78,7 +77,8 @@ def calculate_tfidf_for_commits(project_name: str, metrics_base_dir: str) -> Non
     print("\n--- 処理後のデータフレーム（先頭5行） ---")
     print(final_df.head())
     print("\n--- 追加された列 ---")
-    print(final_df[tfidf_col_names].head())
+    added_cols = [col for col in final_df.columns if col.startswith("VCC_w")]
+    print(final_df[added_cols].head())
 
 
 if __name__ == '__main__':

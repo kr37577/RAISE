@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # 対象データディレクトリ（プロジェクト名の一覧をここから取得）
-DATA_DIR='/work/riku-ka/vuljit/datasets/raw'
+DATA_DIR='/work/riku-ka/vuljit/datasets/derived_artifacts/aggregate'
 SBATCH_SCRIPT="/work/riku-ka/vuljit/scripts/modeling/predict_one_project.sh"
 
 if [[ ! -d "$DATA_DIR" ]]; then
@@ -11,8 +11,7 @@ if [[ ! -d "$DATA_DIR" ]]; then
 fi
 cd /work/riku-ka/vuljit
 
-
-
+export VULJIT_BASE_DATA_DIR="$DATA_DIR"
 mkdir -p logs errors
 
 # プロジェクト一覧を取得（深さ1のディレクトリ名）
@@ -21,7 +20,7 @@ mapfile -t PROJECTS < <(find "$DATA_DIR" -mindepth 1 -maxdepth 1 -type d -printf
 if command -v sbatch >/dev/null 2>&1; then
   echo "[info] submitting ${#PROJECTS[@]} jobs via sbatch from: $DATA_DIR"
   for p in "${PROJECTS[@]}"; do
-    jid=$(sbatch --parsable --job-name="pred_${p}" --export=ALL,PROJECT="${p}" "$SBATCH_SCRIPT")
+    jid=$(sbatch --parsable --job-name="pred_${p}" --export=ALL,PROJECT="${p}",VULJIT_BASE_DATA_DIR="${DATA_DIR}" "$SBATCH_SCRIPT")
     echo "submitted: ${p} -> job ${jid}"
   done
   exit 0
