@@ -2,77 +2,188 @@
 
 この資料は `vuljit/scripts` 内の代表的なスクリプトがどこにデータを保存するかを整理したものです。各パイプラインは環境変数で出力先を上書きできる設計になっており、未設定の場合はリポジトリ内の `datasets/` 系ディレクトリに保存されます。
 
-## 基本的なディレクトリと環境変数
+## data_acquisition 配下スクリプトの出力先
 
-- `VULJIT_BASE_DATA_DIR`（既定: `datasets`）と `VULJIT_RESULTS_DIR`（既定: `datasets/model_outputs`）が分析済みデータとモデル出力のルートを決める [`modeling/settings.py`](../modeling/settings.py#L68-L83)。
-- CLI やシェルスクリプトは `VULJIT_*` 系の環境変数を参照し、未指定時は `datasets/raw/` や `datasets/derived_artifacts/` 配下を既定値とする。
-- `scripts/orchestration/config/default.yaml` には CLI で使う想定ディレクトリの雛形が定義されている（例: `datasets/raw/srcmap_json` や `datasets/metric_inputs`）。
+### coverage_download_reports.py
+- **役割**: OSS-Fuzz の GCS カバレッジレポートから `summary.json` など指定ファイルを取得し、パッケージ/日付/ターゲットごとの階層で保存する。
+- **既定の保存先**: `datasets/raw/coverage_report/<package>/<YYYYMMDD>/<target|no_target>/linux/<filename>`
+  - ルートは環境変数 `VULJIT_COVERAGE_DIR` または引数 `--out` で変更可能（未指定時は `datasets/raw/coverage_report`）。
+- **主な入力**: `datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv`（環境変数 `VULJIT_VUL_CSV` または `--csv` で上書き可）。
+- **関連環境変数**: `VULJIT_START_DATE` / `VULJIT_END_DATE`（期間指定）、`VULJIT_COVERAGE_FILES`（ダウンロード対象ファイルリスト）、`VULJIT_WORKERS`（並列数）。
+- **補足**: 既に同名ファイルが存在する場合はスキップし、階層ディレクトリは自動作成される。
 
-## データ取得系 (`data_acquisition`)
+### coverage_download_reports.sh
+- **役割**: 上記 Python スクリプトを SLURM ジョブとして実行し、必要な環境変数を設定するジョブスクリプト。
+- **保存先の扱い**:
+  - `VULJIT_COVERAGE_DIR` を `datasets/raw/coverage_report` に初期化してエクスポート。
+  - 追加生成物として `scripts/data_acquisition/logs/` と `scripts/data_acquisition/errors/` を作成（SLURM 標準出力/標準エラー置き場）。
+  - 将来的な zip 化の設定項目 (`VULJIT_COVERAGE_ZIP_DIR` → `datasets/derived_artifacts/coverage_zip`) がコメントとして残されている。
 
-| スクリプト | 既定保存先 | 上書き方法 | 補足 |
-| --- | --- | --- | --- |
-| `data_acquisition/coverage_download_reports.py` | `datasets/raw/coverage_report` | `--out`, `VULJIT_COVERAGE_DIR` | 取得対象 CSV やファイル種別も CLI/環境変数で調整可能 [`coverage_download_reports.py`](data_acquisition/coverage_download_reports.py#L345-L375)。 |
-| `data_acquisition/coverage_download_reports.sh` | 同上（環境変数をエクスポート） | `VULJIT_COVERAGE_DIR`, `VULJIT_COVERAGE_ZIP_DIR` | Python 実行後の zip 化先は `datasets/derived_artifacts/coverage_zip` が既定。 |
-| `data_acquisition/download_srcmap.py` | `datasets/raw/srcmap_json` | `-d/--dir`, `VULJIT_SRCDOWN_DIR` | CSV/期間の既定は OSS-Fuzz 脆弱性一覧 [`download_srcmap.py`](data_acquisition/download_srcmap.py#L126-L171)。 |
-| `data_acquisition/download_srcmap.sh` | 同上 | `VULJIT_SRCDOWN_DIR`, `VULJIT_VUL_CSV` | Slurm 用ラッパー。 |
-| `data_acquisition/ossfuzz_vulnerability_issue_report_extraction.py` | `datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv` | `--out`, `VULJIT_VUL_CSV` | `--cache-dir` で ZIP キャッシュ先を指定可能 [`ossfuzz_vulnerability_issue_report_extraction.py`](data_acquisition/ossfuzz_vulnerability_issue_report_extraction.py#L240-L290)。 |
+### download_srcmap.py
+- **役割**: OSS-Fuzz カバレッジバケット `oss-fuzz-coverage` から `<date>.json` のソースマップを取得する。
+- **既定の保存先**: `datasets/raw/srcmap_json/<package>/json/<YYYYMMDD>.json`
+  - ルートは環境変数 `VULJIT_SRCDOWN_DIR` または引数 `--dir` で変更可能。
+- **主な入力**: プロジェクトリスト CSV（既定は `datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv`、`VULJIT_VUL_CSV` で上書き可能）。
+- **関連環境変数**: `VULJIT_START_DATE` / `VULJIT_END_DATE`（取得期間）、`VULJIT_WORKERS`（並列数）。`--csv-column` で列番号指定も可能。
+- **補足**: 取得対象が存在しない場合はファイルを作成しない。パッケージ別サブディレクトリは自動作成される。
 
-## メトリクス抽出 (`metric_extraction`)
+### download_srcmap.sh
+- **役割**: `download_srcmap.py` を SLURM で実行するラッパースクリプト。
+- **保存先の扱い**: `VULJIT_SRCDOWN_DIR` を `datasets/raw/srcmap_json` に初期化して Python 側に引き渡す。ジョブログ用に `scripts/data_acquisition/logs/` / `errors/` を利用。
 
-### コミット/テキストメトリクス
+### ossfuzz_vulnerability_issue_report_extraction.py
+- **役割**: OSV のアーカイブ (GCS) を取得し、OSS-Fuzz 脆弱性レポートを CSV 化する。
+- **既定の保存先**: `datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv`
+  - 引数 `--out` または環境変数 `VULJIT_VUL_CSV` で出力パスを指定可能。ディレクトリが存在しない場合は自動作成する。
+- **関連オプション**:
+  - `--cache-dir` を指定するとアーカイブをローカルキャッシュし、以降の実行で再利用。
+  - `VULJIT_OSV_ARCHIVE_URL` を設定するとダウンロード元 ZIP の URL を明示的に切り替えられる。
+- **補足**: 出力 CSV はモノレール ID 昇順でソートされ、UTF-8 で保存される。
 
-| スクリプト | 既定保存先 | 上書き方法・備考 |
-| --- | --- | --- |
-| `metric_extraction/build_commit_metrics_pipeline.py` | `<metrics_dir>/<project>/<project>_commit_metrics_with_tfidf.csv`（既定 `datasets/metric_inputs`） | `--metrics-dir`, `VULJIT_METRICS_DIR`。脆弱性 CSV は `--vuln-csv`/`VULJIT_VUL_CSV` で差し替え可 [`build_commit_metrics_pipeline.py`](metric_extraction/build_commit_metrics_pipeline.py#L201-L335, #L337-L365)。 |
-| `metric_extraction/text_code_metrics/label.py` | `<output_dir>/<package>_commit_metrics_with_vulnerability_label.csv` | `--vuln_file` で参照 CSV を変更。既定は `/work/riku-ka/...` の絶対パスなので環境に合わせて要調整 [`label.py`](metric_extraction/text_code_metrics/label.py#L15-L112, #L134-L162)。 |
-| `metric_extraction/text_code_metrics/vccfinder_commit_message_metrics.py` | `<metrics_dir>/<project>/<project>_commit_metrics_with_tfidf.csv` | `-m/--metrics-dir`。`collect_metrics_from_github_project.sh` から呼び出され、同ディレクトリに出力する設計 [`vccfinder_commit_message_metrics.py`](metric_extraction/text_code_metrics/vccfinder_commit_message_metrics.py#L55-L112, #L140-L166)。 |
-| `metric_extraction/collect_code_text_metrics.py` | `merged_metrics.csv`（実行時 `-o` で指定） | `collect_metrics_from_github_project.sh` では `<metrics_dir>/<project>/<project>_code_text_metrics.csv` に書き出す [`collect_code_text_metrics.py`](metric_extraction/collect_code_text_metrics.py#L32-L200) と [`collect_metrics_from_github_project.sh`](metric_extraction/collect_metrics_from_github_project.sh#L7-L47)。 |
+## metric_extraction 配下スクリプトの出力先
 
-### カバレッジ集約
+### build_commit_metrics_pipeline.py
+- **役割**: Git リポジトリからコミットメトリクスを抽出し、脆弱性ラベルと TF-IDF 特徴量を付与して CSV 化する。
+- **既定の保存先**: `datasets/derived_artifacts/commit_metrics/<project>/<project>_commit_metrics_with_tfidf.csv`
+  - ルートは `--metrics-dir` 引数または `VULJIT_METRICS_DIR` で変更可能。ディレクトリは自動作成。
+- **主な入力**: 脆弱性 CSV (`datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv`、`VULJIT_VUL_CSV` で上書き可) とローカル Git リポジトリ。
+- **補足**: 既存ファイルがある場合は未処理コミットのみを追記し、`--force` で再計算。ラベル列は `NEW_LABEL_COLUMN` の有無で管理。
 
-| スクリプト | 既定保存先 | 上書き方法・備考 |
-| --- | --- | --- |
-| `metric_extraction/coverage_aggregation/process_coverage_project.py` | `datasets/coverage_metrics/<project>/...` | `--out` または `VULJIT_COVERAGE_METRICS_DIR` で上書き可能。未指定時は `VULJIT_BASE_DATA_DIR/coverage_metrics` → `<repo>/datasets/coverage_metrics` の順でフォールバックする [`process_coverage_project.py`](metric_extraction/coverage_aggregation/process_coverage_project.py#L10-L58)。 |
-| `orchestration/cli.py` の `metrics coverage-aggregate` サブコマンド | `datasets/coverage_metrics/<project>/...` | `--out`, `VULJIT_COVERAGE_METRICS_DIR`, `VULJIT_BASE_DATA_DIR` で上書き可。入力の既定は `data/coverage_gz`（`VULJIT_COVERAGE_DIR`） [`cli.py`](orchestration/cli.py#L190-L208)。 |
+### cluster.sh
+- **役割**: `build_commit_metrics_pipeline.py` を SLURM で実行するジョブスクリプト。
+- **保存先の扱い**: 既定で `datasets/derived_artifacts/commit_metrics/` に保存。ジョブログは `scripts/metric_extraction/logs/` / `errors/` に出力。
+- **補足**: `--since`/`--until` のデフォルトをオプションで差し込む仕組みがある。
 
-### パッチカバレッジ
+### coverage_aggregation/process_coverage_project.py
+- **役割**: OSS-Fuzz カバレッジ JSON を集計し、ファイル単位 (`*_and_date.csv`) と日次トータル (`*_total_and_date.csv`) を生成。
+- **既定の保存先**: `VULJIT_COVERAGE_METRICS_DIR/<project>/` → 未設定なら `VULJIT_BASE_DATA_DIR/coverage_metrics/<project>/`、いずれも未設定時は `datasets/coverage_metrics/<project>/`。
+- **補足**: 既存 CSV が無い場合でもヘッダーのみの空ファイルを生成し、出力ディレクトリは自動で作成する。
 
-| スクリプト | 既定保存先 | 上書き方法・備考 |
-| --- | --- | --- |
-| `metric_extraction/patch_coverage_pipeline/create_daily_diff.py` | `data/intermediate/patch_coverage/daily_diffs`（`VULJIT_INTERMEDIATE_DIR` 基準） | `--out`, `--src`, `--repos` で入出力を切り替え可能 [`create_daily_diff.py`](metric_extraction/patch_coverage_pipeline/create_daily_diff.py#L120-L209)。 |
-| `metric_extraction/patch_coverage_pipeline/calculate_patch_coverage_per_project_test.py` | `<out>/<project>_patch_coverage.csv`（既定 `outputs/metrics/patch_coverage`） | `--out`, `VULJIT_PATCH_COVERAGE_OUT`, `VULJIT_PARSING_RESULTS_DIR` 等で制御。途中再開用に既存 CSV を追記する仕様 [`calculate_patch_coverage_per_project_test.py`](metric_extraction/patch_coverage_pipeline/calculate_patch_coverage_per_project_test.py#L1-L126)。 |
-| `metric_extraction/patch_coverage_pipeline/calculate_patch_coverage.py` | `/work/riku-ka/patch_coverage_culculater/...` に固定 | 実験用スクリプトで絶対パスがハードコードされているため、利用前に定数を書き換える必要がある [`calculate_patch_coverage.py`](metric_extraction/patch_coverage_pipeline/calculate_patch_coverage.py#L12-L22)。 |
+### coverage_aggregation/run_process_coverage_project.sh
+- **役割**: 単体/一括処理で `process_coverage_project.py` を呼び出すユーティリティ。
+- **保存先の扱い**: `VULJIT_COVERAGE_METRICS_DIR` を `datasets/derived_artifacts/coverage_metrics` に初期化して Python に渡す。ジョブログは `coverage_aggregation/logs/` / `errors/`。
+- **補足**: `--all` 指定で `datasets/raw/coverage_report` 以下の全プロジェクトを処理。
 
-## モデリング (`modeling`)
+### coverage_aggregation/cluster_coverage.sh
+- **役割**: 上記ラッパーを SLURM で多重実行するジョブスクリプト。
+- **保存先の扱い**: `run_process_coverage_project.sh --all /work/riku-ka/vuljit/datasets/raw/coverage_report` を固定実行し、結果を `datasets/derived_artifacts/coverage_metrics/` に蓄積。ログ/エラーは `coverage_aggregation/logs/` / `errors/`。
 
-| スクリプト | 既定保存先 | 上書き方法・備考 |
-| --- | --- | --- |
-| `modeling/aggregate_metrics_pipeline.py` | `<output_base>/<project>/<project>_daily_aggregated_metrics.csv`（既定 `datasets/derived_artifacts/aggregate`） | CLI の `--metrics`, `--coverage`, `--patch-coverage`, `--out` や `VULJIT_*` で制御 [`aggregate_metrics_pipeline.py`](modeling/aggregate_metrics_pipeline.py#L748-L814)。 |
-| `modeling/main_per_project.py` | `datasets/model_outputs/<model>/<project>/...` | [`settings.py`](modeling/settings.py#L68-L83) の環境変数でモデル出力先を変更可能。実験ごとに `*_metrics.json`, `*_importances.csv`, `*_per_fold_metrics.csv`, `*_daily_aggregated_metrics_with_predictions.csv` を生成 [`main_per_project.py`](modeling/main_per_project.py#L218-L315)。 |
-| `modeling/evaluation.py` | `MODEL_OUTPUT_DIRECTORY`（モデル）と `LOGS_DIRECTORY`（HPO 結果） | `settings.SAVE_BEST_MODEL` や `SAVE_HYPERPARAM_RESULTS` を有効化すると joblib/JSON を保存する [`evaluation.py`](modeling/evaluation.py#L139-L207)。 |
-| `modeling/predict_one_project.sh`, `aggregate_metrics_pipeline.sh` など | それぞれ `VULJIT_BASE_DATA_DIR` などをハードコードしている | 動作前に環境変数で上書きすると再配置が容易。 |
+### patch_coverage_pipeline/prepare_patch_coverage_inputs.py
+- **役割**: `srcmap_json` から `revisions_<project>.csv` を生成し、Git リポジトリからコミット日時を付与して `revisions_with_commit_date_<project>.csv` として集約。
+- **既定の保存先**: コミット日時付与後の成果物は `datasets/derived_artifacts/patch_coverage_inputs/`（`--commit-out` または `VULJIT_PATCH_COVERAGE_INPUTS_DIR` で変更）。
+- **主な入力**:
+  - `--srcmap-root` 未指定時は `datasets/raw/srcmap_json/`（`VULJIT_SRCDOWN_DIR` があればそれを優先）。
+  - クローン済みリポジトリは `data/intermediate/cloned_repos/` または `VULJIT_CLONED_REPOS_DIR`。
+- **補足**: `--skip-revisions` / `--skip-commit` で段階的に処理を省略でき、一時ディレクトリ利用時は処理後にクリーンアップ。
 
-## オーケストレーション (`orchestration`)
+### patch_coverage_pipeline/create_project_csvs_from_srcmap.py
+- **役割**: `srcmap_json` の解析から `revisions_<project>.csv` を生成する単体スクリプト。
+- **既定の保存先**: `data/intermediate/patch_coverage/csv_results/`（`VULJIT_INTERMEDIATE_DIR` 経由で変更可）。
+- **補足**: `prepare_patch_coverage_inputs.sh` から呼ばれる際は `datasets/derived_artifacts/patch_coverage_inputs/` へ出力を向ける。
 
-- `orchestration/cli.py` は `download-srcmap`, `download-coverage`, `metrics`, `prediction` などのコマンドで各処理を実行し、未指定時は `scripts/orchestration/data/...` 配下を利用する (`VULJIT_*` 環境変数で上書き可能)。
-- `orchestration/config/default.yaml` には CLI 用の標準パス (`datasets/raw/oss_fuzz_vulns.csv` など) がまとめられている。
-- `orchestration/prediction.sh`・`prediction/*.py` は `datasets/derived_artifacts/aggregate` を入力、`datasets/model_outputs` を出力として想定している。
+### patch_coverage_pipeline/revision_with_date.py
+- **役割**: `revisions_<project>.csv` にコミット日時を追加して `revisions_with_commit_date_<project>.csv` を作成。
+- **既定の保存先**: `datasets/derived_artifacts/patch_coverage_inputs/`（`VULJIT_PATCH_COVERAGE_INPUTS_DIR`）。
+- **補足**: Git リポジトリのベースは `data/intermediate/cloned_repos/`（`VULJIT_CLONED_REPOS_DIR`）を想定。
 
-## プロジェクトマッピング (`project_mapping`)
+### patch_coverage_pipeline/create_daily_diff.py
+- **役割**: `revisions_with_commit_date_<project>.csv` からコミット間の差分ファイルとパッチを生成。
+- **既定の保存先**: `data/intermediate/patch_coverage/daily_diffs/<project>/`
+  - 各日付のファイル一覧 `YYYYMMDD.csv` と対応する `YYYYMMDD_patches/` 以下の `.patch` 群を出力。
+  - ルートは `--out` または `VULJIT_PATCH_COVERAGE_DIFFS_DIR` で変更可能。
+- **主な入力**: `datasets/derived_artifacts/patch_coverage_inputs/`（`--input` / `VULJIT_PATCH_COVERAGE_INPUTS_DIR`）、`datasets/intermediate/cloned_repos/`（`--repos` / `VULJIT_CLONED_REPOS_DIR`）。
+- **補足**: 途中再開に備えて `.progress` と既存ファイルの検出ロジックを持つ。
 
-| スクリプト | 既定保存先 | 備考 |
-| --- | --- | --- |
-| `project_mapping/mapping.py` | `scripts/project_mapping/project_mapping.csv` | 入力 CSV から `project_id,directory_name` の対応表を生成 [`mapping.py`](project_mapping/mapping.py#L61-L92)。 |
-| `project_mapping/mapping_filter.py` | `scripts/project_mapping/filtered_project_mapping.csv` | `--mapping`, `--projects`, `--output` でパス指定可 [`mapping_filter.py`](project_mapping/mapping_filter.py#L5-L45)。 |
-| `project_mapping/count_c_cpp_projects.py` | 指定した `--out-csv`（未指定なら標準出力） | CLI 経由で呼び出す想定。 |
+### patch_coverage_pipeline/calculate_patch_coverage_per_project.py
+- **役割**: 日別差分と GCS カバレッジ HTML を突き合わせ、追加行のカバレッジ率を算出して CSV に蓄積。
+- **既定の保存先**: `datasets/derived_artifacts/patch_coverage_metrics/<project>/<project>_patch_coverage.csv`
+  - ルートは `--out` または `VULJIT_PATCH_COVERAGE_RESULTS_DIR` で変更可。
+- **解析ログ**: HTML 解析のキャッシュ JSON は `data/intermediate/patch_coverage/parsing_results/`（`--parsing-out` / `VULJIT_PATCH_COVERAGE_PARSING_DIR`）に保存。
+- **補足**: 既存 CSV を読み込んで日付単位で追記し、GCS は匿名クライアントでアクセスする。
 
-## ユーティリティ
+### patch_coverage_pipeline/run_culculate_patch_coverage_pipeline.py
+- **役割**: `revisions_with_commit_date_<project>.csv` を直接読み込み、Git 差分と GCS カバレッジを突き合わせて最終 CSV を生成するインメモリ版パイプライン。
+- **既定の保存先**: `datasets/derived_artifacts/patch_coverage_metrics/<project>_patch_coverage.csv`（`--coverage-out` / `VULJIT_PATCH_COVERAGE_RESULTS_DIR`）。
+- **補足**: `--parsing-out` 指定時は HTML 解析 JSON を併せて保存。並列数は `--workers` で調整。
 
-- `utilities/zip.sh` は引数で受け取ったディレクトリ群を zip 化し、3 番目の引数（既定は元ディレクトリ）に保存する。Slurm 環境で動かす前提のため、ローカル利用時は引数に注意。
-- `utilities/single_zip.sh` も同様に個別ディレクトリを圧縮する簡易ツール。
+### patch_coverage_pipeline/prepare_patch_coverage_inputs.sh
+- **役割**: 上記 Python パイプラインを既定のリポジトリ構成で実行。
+- **保存先の扱い**: `DEFAULT_COMMIT_OUT` を `datasets/derived_artifacts/patch_coverage_inputs` に設定し、必要に応じて `DEFAULT_SRCMAP_ROOT`（`datasets/raw/srcmap_json`）と `DEFAULT_REPOS`（`data/intermediate/cloned_repos`）を明示。
 
-## 補足
+### patch_coverage_pipeline/run_shell_for_patch_projects.sh
+- **役割**: `revisions_with_commit_date_<project>.csv` を列挙し、プロジェクトごとに任意のシェルスクリプト（例: `submit_patch_coverage_jobs.sh`）を実行。
+- **保存先の扱い**: 入力既定は `datasets/derived_artifacts/patch_coverage_inputs/`。指定スクリプト側で生成される `logs/` / `errors/` を利用する運用を前提としている。
 
-- `calculate_patch_coverage.py` や `text_code_metrics/label.py` など、一部スクリプトは `/work/riku-ka/...` といった開発者ローカルの絶対パスを既定値にしている。利用環境に合わせて変数や環境変数を先に調整すること。
-- `scripts/orchestration` 経由で実行する場合、コマンドライン引数より `.env`（存在すれば）→ 環境変数 → 既定値の順に参照されるため、グローバルな出力先を統一したい場合は `.env` もしくは環境変数の設定が便利。
+### patch_coverage_pipeline/submit_patch_coverage_jobs.sh
+- **役割**: `run_culculate_patch_coverage_pipeline.py` を SLURM ジョブとして起動。
+- **保存先の扱い**: 結果は Python 側のデフォルトで `datasets/derived_artifacts/patch_coverage_metrics/` へ。ジョブログは `patch_coverage_pipeline/logs/` / `errors/`。
+
+### patch_coverage_pipeline/calculate_patch_coverage.sh
+- **役割**: 旧来のジョブアレイでパッチカバレッジを計算するスクリプト（外部ディレクトリを参照）。
+- **保存先の扱い**: `/work/riku-ka/patch_coverage_culculater/daily_diffs` など外部パスを前提としており、リポジトリ内 `datasets/derived_artifacts/patch_coverage_metrics/` ではなく外部ディレクトリに書き出すレガシー構成。
+- **補足**: 利用時は環境に合わせたパス修正が前提。
+
+## modeling 配下スクリプトの出力先
+
+### aggregate_metrics_pipeline.py
+- **役割**: コミットメトリクスとカバレッジ指標を突き合わせ、日次集約特徴量 `*_daily_aggregated_metrics.csv` を生成する。
+- **既定の入力**:
+  - メトリクス: `--metrics` または `VULJIT_METRICS_DIR`（未指定時は `datasets/metric_inputs/<directory>/<directory>_commit_metrics_with_tfidf.csv` を探索）。
+  - カバレッジ: `--coverage` または `VULJIT_COVERAGE_AGG_DIR`（未指定時は `datasets/derived_artifacts/metrics/coverage_aggregate/<project>/` 内の `*_and_date.csv` と `*_total_and_date.csv`）。
+  - パッチカバレッジ: `--patch` または `VULJIT_PATCH_COV_DIR`（未指定時は `datasets/derived_artifacts/metrics/patch_coverage/<project>/<project>_patch_coverage.csv`）。
+- **既定の保存先**: `--out` または `VULJIT_BASE_DATA_DIR`（未指定時は `datasets/derived_artifacts/aggregate/<project>/<project>_daily_aggregated_metrics.csv`）。出力ディレクトリはプロジェクトごとに自動作成され、少数クラス件数が `settings.MIN_SAMPLES_THRESHOLD` 未満の場合は保存をスキップする。
+- **補足**: `datasets/reference_mappings/filtered_project_mapping.csv` に記載された `project_id,directory_name` のペアを想定し、ファイル内で過去 VCC 参照特徴量も付加する。
+
+### aggregate_metrics_pipeline.sh
+- **役割**: 上記 Python 集約スクリプトを SLURM で一括実行する。
+- **保存先の扱い**: `VULJIT_BASE_DATA_DIR` を `/work/riku-ka/vuljit/datasets/derived_artifacts/aggregate` に固定し、ログは `scripts/modeling/logs/` と `scripts/modeling/errors/` に出力。
+- **補足**: `METRICS_BASE_PATH` や `PATCH_COVERAGE_BASE_PATH` が外部ドライブにハードコードされているため、環境に応じて変更が必要。
+
+### main_per_project.py
+- **役割**: プロジェクト単位で学習・評価を実施し、評価結果と予測値を保存するメインエントリ。
+- **既定の入力**: `settings.BASE_DATA_DIRECTORY`（`VULJIT_BASE_DATA_DIR` で変更可、未指定時は `datasets/`）配下の `<project>/<project>_daily_aggregated_metrics.csv`。
+- **既定の保存先**: `settings.RESULTS_BASE_DIRECTORY`（`VULJIT_RESULTS_DIR` または `VULJIT_MODEL` で変更可、既定は `datasets/model_outputs/<selected_model>/<project>/`）。
+  - `expX_metrics.json`, `expX_importances.csv`, `expX_per_fold_metrics.csv` をプロジェクト別に生成。
+  - 予測確率を付与した `*_daily_aggregated_metrics_with_predictions.csv` を併せて保存し、`predicted_risk_<canonical>` / `predicted_label_<canonical>` 列を追加する。
+- **補足**: 予測の二値化閾値は `settings.PREDICTION_LABEL_THRESHOLD`（`VULJIT_LABEL_THRESHOLD` 環境変数）で制御可能。
+
+### evaluation.py
+- **役割**: 交差検証処理とモデル保存処理を担当する内部モジュール。
+- **保存先の扱い**:
+  - `settings.SAVE_BEST_MODEL` が有効な場合、`settings.MODEL_OUTPUT_DIRECTORY/<project>/best_model_<run_tag>.joblib` と `model_metadata_<run_tag>.json` を作成。
+  - `settings.SAVE_HYPERPARAM_RESULTS` が有効な場合、`settings.LOGS_DIRECTORY/<project>/cv_results_<run_tag>.pkl` と `metadata_<run_tag>.json` を保存。
+- **補足**: 両フラグは既定で `False` のため、オンにする際は出力ディレクトリの容量と管理方法に注意する。
+
+### settings.py
+- **役割**: モデリング全体で使用するパスと実験設定を集約。
+- **保存関連の主な設定**:
+  - `VULJIT_BASE_DATA_DIR` で学習データの search ルート、`VULJIT_RESULTS_DIR` および `VULJIT_MODEL` で結果出力先を切り替え。
+  - `MODEL_OUTPUT_DIRECTORY` / `LOGS_DIRECTORY` は前述の保存フラグに連動。
+- **補足**: `SELECTED_MODEL` の値に応じて `datasets/model_outputs/<model>/` 以下のサブディレクトリが自動で変わる。
+
+### predict_one_project.sh
+- **役割**: orchestration の CLI (`scripts/orchestration/cli.py`) を介して単一プロジェクトのトレーニングを実行するための SLURM スクリプト。
+- **保存先の扱い**: `VULJIT_BASE_DATA_DIR` を未設定時に `/work/riku-ka/vuljit/datasets/derived_artifacts/aggregate` へ初期化し、ジョブログは `scripts/modeling/logs/` / `errors/` に保存。
+- **補足**: 実際のモデルや結果は CLI 側で `settings.py` の指定に従って保存される。
+
+## project_mapping 配下スクリプトの出力先
+
+### oss_fuzz_project_info.py
+- **役割**: `oss-fuzz` リポジトリの `projects/<name>/project.yaml` から C/C++ プロジェクトのメタデータを収集する。
+- **既定の入力/取得先**:
+  - リポジトリ: `datasets/raw/oss-fuzz`（`--dest` または `VULJIT_OSSFUZZ_DEST` 相当で変更可、未存在時は `DEFAULT_REPO_URL` から clone）。
+  - 脆弱性 CSV: `datasets/derived_artifacts/vulnerability_reports/oss_fuzz_vulnerabilities.csv`（`--vuln-csv` で差し替え可能）。
+- **既定の保存先**:
+  - メタデータ: `datasets/derived_artifacts/oss_fuzz_metadata/oss_fuzz_project_metadata.csv` に追記（`--out` で変更）。ディレクトリは自動生成し、ヘッダは初回のみ書き出す。
+  - `--summarize-vulns` 指定時は `datasets/derived_artifacts/oss_fuzz_metadata/c_cpp_vulnerability_summary.csv`（`--summary-out` 変更可）へ脆弱性数サマリを保存。
+- **補足**: `--count-unique-days` を併用するとコミットと日付の統計を計算するが、ファイルには書き出さず標準出力に表示する。
+
+### clone_and_run_projects.sh
+- **役割**: 上記サマリ CSV を基に C/C++ プロジェクトをローカル clone/更新し、任意コマンドをプロジェクト単位で実行する。
+- **既定の入力**: `datasets/derived_artifacts/oss_fuzz_metadata/c_cpp_vulnerability_summary.csv`（`-c` で指定）。
+- **既定の保存先**: `datasets/raw/cloned_c_cpp_projects/<project>/` に対象リポジトリを clone。既存なら `git fetch --all --prune` で更新。
+- **コマンド実行**:
+  - `-r`（runner）指定で `<runner> <project> <repo> [args...]` を直接実行。
+  - `-C`（command template）指定で `{project}`, `{repo}`, `{runner}`, `{runner_args}` プレースホルダを展開し `bash -c` で実行。
+  - `--since` / `--until` オプションは runner 引数に自動補完される（既に指定されていれば挿入しない）。
+- **補足**: ランナーやテンプレートが生成するログ/成果物は各コマンドに依存するため、本スクリプト側では管理しない。

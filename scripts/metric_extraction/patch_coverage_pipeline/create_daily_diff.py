@@ -22,7 +22,7 @@ DEFAULT_INPUT_CSV_DIRECTORY = Path(
 DEFAULT_CLONED_REPOS_DIRECTORY = Path(
     os.environ.get(
         "VULJIT_CLONED_REPOS_DIR",
-        REPO_ROOT / "data" / "intermediate" / "cloned_repos",
+        REPO_ROOT / "datasets" / "intermediate" / "cloned_repos",
     )
 )
 DEFAULT_OUTPUT_DIRECTORY = Path(
@@ -251,11 +251,20 @@ def main():
             df = pd.read_csv(csv_file)
             
             # 必要な列が存在するか確認
-            required_cols = ['date', 'url', 'revision']
+            required_cols = ['date', 'url', 'revision', 'repo_name']
             if not all(col in df.columns for col in required_cols):
                 print(f"  - 警告: '{csv_file.name}' に必要な列がありません。スキップします。")
                 continue
             
+            # 対象プロジェクトの行に限定
+            original_len = len(df)
+            df = df[df['repo_name'] == project_name].copy()
+            if df.empty:
+                print(f"  - 警告: プロジェクト '{project_name}' に一致する行がありません。スキップします。")
+                continue
+            if original_len != len(df):
+                print(f"  - フィルタ: {original_len}行 -> {len(df)}行 (repo_name='{project_name}')")
+
             # 日付でソートされていることを保証する (重要)
             df = df.sort_values(by='date').reset_index(drop=True)
 

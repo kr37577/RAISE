@@ -104,7 +104,7 @@ def append_commit_dates(source_dir: Path | str,
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Append commit date to revision CSVs created from srcmap.')
     this_dir = Path(__file__).resolve().parent
-    repo_root = this_dir.parent.parent
+    repo_root = this_dir.parent.parent.parent
     default_src = os.environ.get('VULJIT_INTERMEDIATE_DIR', str(repo_root / 'data' / 'intermediate'))
     default_src = os.path.join(default_src, 'patch_coverage', 'csv_results')
     default_repos = os.environ.get('VULJIT_CLONED_REPOS_DIR', str(repo_root / 'data' / 'intermediate' / 'cloned_repos'))

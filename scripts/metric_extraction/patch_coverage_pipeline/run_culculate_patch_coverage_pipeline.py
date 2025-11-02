@@ -37,6 +37,19 @@ CODE_FILE_EXTENSIONS: Tuple[str, ...] = (
     '.h', '.hh', '.hpp', '.hxx', '.h++'
 )
 
+_WORKER_STORAGE_CLIENT: Optional[storage.Client] = None
+
+
+def _initialize_worker_storage_client() -> None:
+    global _WORKER_STORAGE_CLIENT
+    if _WORKER_STORAGE_CLIENT is not None:
+        return
+    try:
+        _WORKER_STORAGE_CLIENT = storage.Client.create_anonymous_client()
+    except Exception as e:
+        _WORKER_STORAGE_CLIENT = None
+        print(f"  - 警告: ワーカー初期化時に GCS クライアント生成に失敗しました: {e}")
+
 
 def get_repo_dir_name_from_url(url: str) -> str:
     if not isinstance(url, str) or not url:
@@ -83,13 +96,16 @@ def get_patch_text(repo_path: Path, old_revision: str, new_revision: str, rel_pa
             return None
 
         lines = patch_text.splitlines()
-        start_idx = 0
+        start_idx: Optional[int] = None
         for i, line in enumerate(lines):
             if line.startswith('@@'):
                 start_idx = i
                 break
-        if not lines or not (start_idx < len(lines) and lines[start_idx].startswith('@@')):
-            return None
+
+        if start_idx is None:
+            print(f"    - 警告: 差分にhunkが含まれていないため全体を使用します: {rel_path}")
+            return patch_text if patch_text.endswith("\n") else patch_text + "\n"
+
         return "\n".join(lines[start_idx:]) + "\n"
     except subprocess.CalledProcessError:
         return None
@@ -107,6 +123,7 @@ def _compute_coverage_worker(args: Tuple[str, str, str, str, Optional[str]]) -> 
         file_path_str=file_path,
         patch_text=patch_text,
         parsing_output_root=parsing_root,
+        storage_client=_WORKER_STORAGE_CLIENT,
     )
 
 
@@ -141,12 +158,17 @@ def process_project(
         print(f"エラー: '{csv_file}' の読み込みに失敗しました: {e}")
         return
 
-    required_cols = {'date', 'url', 'revision'}
+    required_cols = {'date', 'url', 'revision', 'repo_name'}
     if not required_cols.issubset(df.columns):
         print(f"エラー: '{csv_file}' に必要な列 {required_cols} がありません。")
         return
 
-    df = df.sort_values(by='date').reset_index(drop=True)
+    df = df[df['repo_name'] == project_name].copy()
+    if df.empty:
+        print(f"  - 対象プロジェクト '{project_name}' の行がCSVに存在しません ({csv_file}).")
+        return
+
+    df = df.sort_values(by='date', kind='mergesort').reset_index(drop=True)
     if len(df) < 2:
         print(f"  - データが少ないため差分を計算できません ({csv_file}).")
         return
@@ -158,14 +180,15 @@ def process_project(
     if parsing_dir is not None:
         parsing_dir.mkdir(parents=True, exist_ok=True)
         parsing_dir_path = parsing_dir
+    parsing_out_str = str(parsing_dir_path) if parsing_dir_path else None
 
-    processed_dates: set[str] = set()
+    skipped_dates: set[str] = set()
     if output_file_path.exists():
         try:
             existing_df = pd.read_csv(output_file_path)
             if 'date' in existing_df.columns:
-                processed_dates = set(existing_df['date'].astype(str))
-            print(f"✔ 既存の出力から {len(processed_dates)} 件の日付をスキップ対象として読み込みました。")
+                skipped_dates = set(existing_df['date'].astype(str))
+            print(f"✔ 既存の出力から {len(skipped_dates)} 件の日付をスキップ対象として読み込みました。")
         except pd.errors.EmptyDataError:
             print("⚠️ 既存の出力ファイルは空でした。")
         except Exception as e:
@@ -175,95 +198,102 @@ def process_project(
 
     workers = max(1, workers)
     storage_client_for_sequential: Optional[storage.Client] = None
-    if workers == 1:
-        try:
-            storage_client_for_sequential = storage.Client.create_anonymous_client()
-        except Exception as e:
-            print(f"  - 警告: GCSクライアントの初期化に失敗しました（逐次モード）: {e}")
+    parallel_executor: Optional[ProcessPoolExecutor] = None
 
-    processed_any = False
+    try:
+        if workers == 1:
+            try:
+                storage_client_for_sequential = storage.Client.create_anonymous_client()
+            except Exception as e:
+                print(f"  - 警告: GCSクライアントの初期化に失敗しました（逐次モード）: {e}")
+        else:
+            parallel_executor = ProcessPoolExecutor(
+                max_workers=workers,
+                initializer=_initialize_worker_storage_client,
+            )
 
-    for i in range(1, len(df)):
-        previous_row = df.iloc[i - 1]
-        current_row = df.iloc[i]
-        date_str = str(current_row['date'])
+        processed_any = False
 
-        if date_str in processed_dates:
-            print(f"  - スキップ: 日付 '{date_str}' は既に処理済みです。")
-            continue
+        for i in range(1, len(df)):
+            previous_row = df.iloc[i - 1]
+            current_row = df.iloc[i]
+            date_str = str(current_row['date'])
 
-        repo_dir_name = get_repo_dir_name_from_url(str(current_row['url']))
-        repo_local_path = repos_dir / repo_dir_name
+            if date_str in skipped_dates:
+                print(f"  - スキップ: 日付 '{date_str}' は既に処理済みです。")
+                continue
 
-        print(f"  - 日付: {date_str}")
+            repo_dir_name = get_repo_dir_name_from_url(str(current_row['url']))
+            repo_local_path = repos_dir / repo_dir_name
 
-        changed_files = get_changed_files(
-            repo_local_path,
-            str(previous_row['revision']),
-            str(current_row['revision']),
-            CODE_FILE_EXTENSIONS,
-        )
+            print(f"  - 日付: {date_str}")
 
-        if not changed_files:
-            print("    - 差分対象のファイルが見つかりませんでした。")
-            continue
-
-        patch_records: List[Tuple[str, str]] = []
-        for rel_path in changed_files:
-            patch_text = get_patch_text(
+            changed_files = get_changed_files(
                 repo_local_path,
                 str(previous_row['revision']),
                 str(current_row['revision']),
-                rel_path,
+                CODE_FILE_EXTENSIONS,
             )
-            if patch_text:
-                patch_records.append((rel_path, patch_text))
 
-        if not patch_records:
-            print("    - パッチを生成できるファイルがありませんでした。")
-            continue
+            if not changed_files:
+                print("    - 差分対象のファイルが見つかりませんでした。")
+                continue
 
-        parsing_out_str = str(parsing_dir_path) if parsing_dir_path else None
-
-        daily_results: List[Optional[dict]]
-        if workers == 1:
-            daily_results = []
-            for file_path, patch_text in patch_records:
-                result = compute_patch_coverage_for_patch_text(
-                    project_name=project_name,
-                    date=date_str,
-                    file_path_str=file_path,
-                    patch_text=patch_text,
-                    parsing_output_root=parsing_dir_path,
-                    storage_client=storage_client_for_sequential,
+            patch_records: List[Tuple[str, str]] = []
+            for rel_path in changed_files:
+                patch_text = get_patch_text(
+                    repo_local_path,
+                    str(previous_row['revision']),
+                    str(current_row['revision']),
+                    rel_path,
                 )
-                daily_results.append(result)
+                if patch_text:
+                    patch_records.append((rel_path, patch_text))
+
+            if not patch_records:
+                print("    - パッチを生成できるファイルがありませんでした。")
+                continue
+
+            daily_results: List[Optional[dict]]
+            if workers == 1:
+                daily_results = []
+                for file_path, patch_text in patch_records:
+                    result = compute_patch_coverage_for_patch_text(
+                        project_name=project_name,
+                        date=date_str,
+                        file_path_str=file_path,
+                        patch_text=patch_text,
+                        parsing_output_root=parsing_dir_path,
+                        storage_client=storage_client_for_sequential,
+                    )
+                    daily_results.append(result)
+            else:
+                args_list = [
+                    (project_name, date_str, file_path, patch_text, parsing_out_str)
+                    for file_path, patch_text in patch_records
+                ]
+                daily_results = list(parallel_executor.map(_compute_coverage_worker, args_list))
+
+            filtered_results = [r for r in daily_results if r]
+            for r in filtered_results:
+                total_added = r['total_added_lines']
+                if total_added > 0:
+                    print(f"    - {r['file_path']}: 追加 {total_added}行, うちカバー {r['covered_added_lines']}行 (カバレッジ: {r['patch_coverage']:.2f}%)")
+
+            if filtered_results:
+                processed_any = True
+                df_result = pd.DataFrame(filtered_results)
+                header = not output_file_path.exists() or output_file_path.stat().st_size == 0
+                df_result.to_csv(output_file_path, mode='a', header=header, index=False, encoding='utf-8-sig')
+                print(f"  ✔ 日付 '{date_str}' の結果を '{output_file_path}' に追記しました。")
+
+        if processed_any or skipped_dates:
+            print(f"\n✔ プロジェクト '{project_name}' の処理が完了しました。結果は '{output_file_path}' に保存されています。")
         else:
-            args_list = [
-                (project_name, date_str, file_path, patch_text, parsing_out_str)
-                for file_path, patch_text in patch_records
-            ]
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                daily_results = list(pool.map(_compute_coverage_worker, args_list))
-
-        filtered_results = [r for r in daily_results if r]
-        for r in filtered_results:
-            total_added = r['total_added_lines']
-            if total_added > 0:
-                print(f"    - {r['file_path']}: 追加 {total_added}行, うちカバー {r['covered_added_lines']}行 (カバレッジ: {r['patch_coverage']:.2f}%)")
-
-        if filtered_results:
-            processed_any = True
-            df_result = pd.DataFrame(filtered_results)
-            header = not output_file_path.exists() or output_file_path.stat().st_size == 0
-            df_result.to_csv(output_file_path, mode='a', header=header, index=False, encoding='utf-8-sig')
-            print(f"  ✔ 日付 '{date_str}' の結果を '{output_file_path}' に追記しました。")
-            processed_dates.add(date_str)
-
-    if processed_any or processed_dates:
-        print(f"\n✔ プロジェクト '{project_name}' の処理が完了しました。結果は '{output_file_path}' に保存されています。")
-    else:
-        print(f"プロジェクト '{project_name}' で処理対象のデータが見つかりませんでした。")
+            print(f"プロジェクト '{project_name}' で処理対象のデータが見つかりませんでした。")
+    finally:
+        if parallel_executor is not None:
+            parallel_executor.shutdown()
 
 
 def main() -> None:
@@ -301,7 +331,7 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=16,
+        default=4,
         help="カバレッジ計算を行う並列プロセス数 (既定: 4、1で逐次実行)",
     )
     args = parser.parse_args()

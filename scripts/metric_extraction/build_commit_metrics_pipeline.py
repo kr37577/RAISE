@@ -339,7 +339,7 @@ def prepare_argument_parser() -> argparse.ArgumentParser:
     repo_root = this_dir.parents[2]
     default_metrics_dir = os.environ.get(
         "VULJIT_METRICS_DIR",
-        os.path.join(repo_root, "datasets", "metric_inputs"),
+        os.path.join(repo_root, "datasets", "derived_artifacts", "commit_metrics"),
     )
     default_vuln_csv = os.environ.get(
         "VULJIT_VUL_CSV",

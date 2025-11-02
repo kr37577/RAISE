@@ -19,7 +19,7 @@ PYENV_ENV_NAME="py3"
 
 # リポジトリルート推定と既定値設定
 export DEFAULT_REPOS="/work/riku-ka/metrics_culculator/cloned_repos"
-export DEFAULT_COMMIT_OUT="/work/riku-ka/vuljit/datasets/patch_coverage_inputs"
+export DEFAULT_COMMIT_OUT="/work/riku-ka/vuljit/datasets/derived_artifacts/patch_coverage_inputs"
 export DEFAULT_SRCMAP_ROOT="/work/riku-ka/vuljit/datasets/raw/srcmap_json"
 
 PYTHON_EXEC="${PYENV_ROOT}/versions/${PYENV_ENV_NAME}/bin/python"

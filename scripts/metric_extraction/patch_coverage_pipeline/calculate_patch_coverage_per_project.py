@@ -29,7 +29,7 @@ COVERAGE_BUCKET_NAME = os.environ.get("VULJIT_COVERAGE_BUCKET", "oss-fuzz-covera
 DEFAULT_OUTPUT_BASE_DIRECTORY = Path(
     os.environ.get(
         "VULJIT_PATCH_COVERAGE_RESULTS_DIR",
-        REPO_ROOT / "datasets" / "derived_artifacts" / "patch_coverage_results",
+        REPO_ROOT / "datasets" / "derived_artifacts" / "patch_coverage_metrics",
     )
 )
 
@@ -53,6 +53,24 @@ _HUNK_RE = re.compile(r"\+([0-9]+)")
 _BLOB_LIST_CACHE: Dict[Tuple[str, str], list] = {}
 _BLOB_RESOLVE_CACHE: Dict[Tuple[str, str, str], Optional[str]] = {}
 _REPORT_CACHE: Dict[str, Dict[int, Dict[str, Any]]] = {}
+
+# 並列ワーカーで共有する匿名クライアント（初期化コスト削減用）
+_WORKER_STORAGE_CLIENT: Optional[storage.Client] = None
+
+
+def _initialize_worker_storage_client() -> None:
+    """
+    ProcessPoolExecutor の initializer から呼び出し、
+    各ワーカーで一度だけ匿名クライアントを生成して共有する。
+    """
+    global _WORKER_STORAGE_CLIENT
+    if _WORKER_STORAGE_CLIENT is not None:
+        return
+    try:
+        _WORKER_STORAGE_CLIENT = storage.Client.create_anonymous_client()
+    except Exception as e:
+        _WORKER_STORAGE_CLIENT = None
+        print(f"    - 警告: ワーカー初期化時に GCS クライアント生成に失敗しました: {e}")
 
 
 def _extract_added_lines_from_iter(lines: Iterable[str]) -> Dict[int, str]:
@@ -272,12 +290,14 @@ def _process_one_file(args: Tuple[str, str, str, str, str]) -> Optional[Dict[str
             return None
 
         parsing_root_path: Optional[Path] = Path(parsing_root_str) if parsing_root_str else None
+        storage_client = _WORKER_STORAGE_CLIENT
         return compute_patch_coverage_for_patch_text(
             project_name=project_name,
             date=date,
             file_path_str=file_path_str,
             patch_text=patch_text,
             parsing_output_root=parsing_root_path,
+            storage_client=storage_client,
         )
     except Exception as e:
         print(f"    - エラー: 並列処理中にエラー: {file_path_str}, {e}")
@@ -294,7 +314,7 @@ def main():
     parser.add_argument('--diffs', default=None, help='create_daily_diff.py の出力ディレクトリ')
     parser.add_argument('--out', default=None, help='パッチカバレッジCSVの出力先ベースディレクトリ')
     parser.add_argument('--parsing-out', default=None, help='HTML解析結果(JSON)の保存ディレクトリ')
-    parser.add_argument('--workers', type=int, default=20, help='並列プロセス数')
+    parser.add_argument('--workers', type=int, default=3, help='並列プロセス数')
     args = parser.parse_args()
     target_project_name = args.project
 
@@ -376,7 +396,10 @@ def main():
             args_list = [(project_name, date, str(patch_dir), parsing_root_str, fp) for fp in file_paths]
 
             # 入力順を維持するため map を使用
-            with ProcessPoolExecutor(max_workers=args.workers) as ex:
+            with ProcessPoolExecutor(
+                max_workers=args.workers,
+                initializer=_initialize_worker_storage_client,
+            ) as ex:
                 results = list(ex.map(_process_one_file, args_list))
 
             # Noneを除外

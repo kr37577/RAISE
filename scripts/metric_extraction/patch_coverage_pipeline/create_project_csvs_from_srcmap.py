@@ -82,7 +82,7 @@ def generate_revisions(root: Path | str,
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Create per-project revision CSVs from srcmap JSONs.')
     this_dir = Path(__file__).resolve().parent
-    repo_root = this_dir.parent.parent  # vuljit/metric_extraction
+    repo_root = this_dir.parent.parent.parent  # vuljit
     default_src_root = os.environ.get('VULJIT_SRCDOWN_DIR', str(repo_root / 'data' / 'srcmap_json'))
     default_out = os.environ.get('VULJIT_INTERMEDIATE_DIR', str(repo_root / 'data' / 'intermediate'))
     default_out = os.path.join(default_out, 'patch_coverage', 'csv_results')
