@@ -17,7 +17,7 @@ import sys
 from dataclasses import dataclass, asdict
 from datetime import datetime, date
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Sequence
 
 
 @dataclass
@@ -51,8 +51,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--pattern",
-        default="*_daily_aggregated_metrics_with_predictions.csv",
-        help="Glob pattern (relative to each project directory) used to match CSV files.",
+        default="*_daily_aggregated_metrics_with_predictions*.csv",
+        help="Glob pattern (relative to each project directory, searched recursively) used to match CSV files.",
     )
     parser.add_argument(
         "--output",
@@ -104,23 +104,38 @@ def _parse_is_vcc(raw: str) -> int:
         return 0
 
 
+def _pick_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
+    """Return the first matching column (case-insensitive) from candidates."""
+    field_map = {name.lower(): name for name in fieldnames}
+    for candidate in candidates:
+        match = field_map.get(candidate.lower())
+        if match:
+            return match
+    return None
+
+
 def _load_rows(csv_path: Path) -> Dict[date, int]:
     """Return mapping date -> is_vcc for the given CSV."""
     by_day: Dict[date, int] = {}
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
-        if not reader.fieldnames or {"merge_date", "is_vcc"} - set(reader.fieldnames):
+        fieldnames = reader.fieldnames or []
+        date_col = _pick_column(fieldnames, ("merge_date", "label_date", "feature_snapshot_date"))
+        vcc_col = _pick_column(fieldnames, ("is_vcc", "y_is_vcc"))
+        if not date_col or not vcc_col:
             raise ValueError("Required columns missing")
         for row in reader:
-            merge_date = _parse_merge_date(row.get("merge_date", ""))
+            merge_date = _parse_merge_date(row.get(date_col, ""))
             if merge_date is None:
                 continue
-            is_vcc = _parse_is_vcc(row.get("is_vcc"))
+            is_vcc = _parse_is_vcc(row.get(vcc_col))
             by_day[merge_date] = is_vcc  # keep last occurrence per day
     return by_day
 
 
-def _analyze_file(path: Path, quiet: bool = False) -> Optional[ProjectStats]:
+def _analyze_file(
+    path: Path, *, project_name: Optional[str] = None, quiet: bool = False
+) -> Optional[ProjectStats]:
     try:
         day_map = _load_rows(path)
     except Exception as exc:  # noqa: BLE001
@@ -135,7 +150,8 @@ def _analyze_file(path: Path, quiet: bool = False) -> Optional[ProjectStats]:
 
     total_days = len(day_map)
     days_with_vcc = sum(day_map.values())
-    project_name = path.parent.name
+    if project_name is None:
+        project_name = path.parent.name
     return ProjectStats(
         project=project_name,
         file=path,
@@ -145,12 +161,13 @@ def _analyze_file(path: Path, quiet: bool = False) -> Optional[ProjectStats]:
     )
 
 
-def _collect_prediction_files(root: Path, pattern: str) -> List[Path]:
+def _collect_prediction_files(root: Path, pattern: str) -> List[tuple[str, Path]]:
     if not root.is_dir():
         raise FileNotFoundError(f"Prediction root not found: {root}")
-    files: List[Path] = []
+    files: List[tuple[str, Path]] = []
     for project_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        files.extend(sorted(project_dir.glob(pattern)))
+        matches = sorted(project_dir.rglob(pattern))
+        files.extend((project_dir.name, match) for match in matches)
     return files
 
 
@@ -217,8 +234,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     rows: List[ProjectStats] = []
-    for file_path in files:
-        stats = _analyze_file(file_path, quiet=args.quiet)
+    for project_name, file_path in files:
+        stats = _analyze_file(file_path, project_name=project_name, quiet=args.quiet)
         if stats:
             rows.append(stats)
     rows.sort(key=lambda r: r.project.lower())

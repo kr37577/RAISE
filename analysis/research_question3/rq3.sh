@@ -66,3 +66,7 @@ run_step "Running additional-build simulation (Strategy4 Multi Regression)" \
   --output-dir "${MULTI_OUTPUT_DIR}"
 
 echo "RQ3 simulation completed. Outputs are available under: ${DATASETS_ROOT}/derived_artifacts/rq3/simulation_outputs"
+
+
+run_step "Combine simulation results" \
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/combine_strategy4_modes.py" \

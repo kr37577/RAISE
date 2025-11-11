@@ -191,18 +191,31 @@ def _parse_is_vcc_flag(raw: str) -> int:
         return 0
 
 
+def _pick_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
+    """Return the first matching column using case-insensitive lookup."""
+    field_map = {name.lower(): name for name in fieldnames}
+    for candidate in candidates:
+        match = field_map.get(candidate.lower())
+        if match:
+            return match
+    return None
+
+
 def _parse_prediction_csv(csv_path: Path) -> Optional[Tuple[int, int]]:
     """Return (total_days, days_with_vcc) for a prediction CSV."""
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
-        if not reader.fieldnames or {"merge_date", "is_vcc"} - set(reader.fieldnames):
+        fieldnames = reader.fieldnames or []
+        date_col = _pick_column(fieldnames, ("merge_date", "label_date", "feature_snapshot_date"))
+        vcc_col = _pick_column(fieldnames, ("is_vcc", "y_is_vcc"))
+        if not date_col or not vcc_col:
             return None
         day_map: Dict[date, int] = {}
         for row in reader:
-            merge_date = _parse_prediction_date(row.get("merge_date", ""))
+            merge_date = _parse_prediction_date(row.get(date_col, ""))
             if merge_date is None:
                 continue
-            is_vcc = _parse_is_vcc_flag(row.get("is_vcc"))
+            is_vcc = _parse_is_vcc_flag(row.get(vcc_col))
             day_map[merge_date] = is_vcc
     if not day_map:
         return None
@@ -213,7 +226,7 @@ def _parse_prediction_csv(csv_path: Path) -> Optional[Tuple[int, int]]:
 
 def _collect_prediction_day_stats(
     prediction_root: Path,
-    pattern: str = "*_daily_aggregated_metrics_with_predictions.csv",
+    pattern: str = "*_daily_aggregated_metrics_with_predictions*.csv",
 ) -> Dict[str, object]:
     """Aggregate total/VCC days from modeling outputs."""
     if not prediction_root.is_dir():
@@ -226,7 +239,7 @@ def _collect_prediction_day_stats(
     for project_dir in sorted(p for p in prediction_root.iterdir() if p.is_dir()):
         project_total = 0
         project_with_vcc = 0
-        for csv_file in sorted(project_dir.glob(pattern)):
+        for csv_file in sorted(project_dir.rglob(pattern)):
             parsed = _parse_prediction_csv(csv_file)
             if not parsed:
                 continue
