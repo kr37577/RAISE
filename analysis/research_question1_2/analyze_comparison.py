@@ -60,7 +60,8 @@ COVERAGE_FEATURE_RENAMES = {
 # キー: モデル名 (グラフの凡例などで使用)
 # バリュー: 対応する結果が格納されているディレクトリのパス
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RESULTS_ROOT = REPO_ROOT / "datasets" / "model_outputs" 
+RESULTS_ROOT = REPO_ROOT / "datasets" / "model_outputs"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "datasets" / "derived_artifacts" / "rq1_rq2" / "evaluation_summary_comparison"
 
 BASE_DIRS = {
     "XGBoost": RESULTS_ROOT / "xgboost",
@@ -121,6 +122,7 @@ def visualize_per_model_importance(
     exp_num: int,
     num_projects: int,
     top_feature_count: int,
+    output_dir: Path,
 ):
     """
     評価指標はモデル間で比較し、特徴量重要度はモデルごとに個別のグラフで可視化する関数
@@ -157,8 +159,9 @@ def visualize_per_model_importance(
     plt.tight_layout()
     # グラフを保存
     metrics_filename = f"exp{exp_num}_metrics_comparison.png"
-    plt.savefig(metrics_filename)
-    print(f"  📈 Metrics comparison plot saved as: {metrics_filename}")
+    metrics_path = output_dir / metrics_filename
+    plt.savefig(metrics_path)
+    print(f"  📈 Metrics comparison plot saved as: {metrics_path.name}")
     plt.show()
     plt.close()
 
@@ -211,8 +214,9 @@ def visualize_per_model_importance(
         
         # モデル名をファイル名に含めて保存
         importance_filename = f"exp{exp_num}_feature_importance_{model_name}.png"
-        plt.savefig(importance_filename)
-        print(f"  📈 Feature importance plot for '{model_name}' saved as: {importance_filename}")
+        importance_path = output_dir / importance_filename
+        plt.savefig(importance_path)
+        print(f"  📈 Feature importance plot for '{model_name}' saved as: {importance_path.name}")
         plt.show()
         plt.close()
 
@@ -496,9 +500,17 @@ def main():
     parser.add_argument('--plot-positives-top', action='store_true', help='陽性上位N件の棒グラフも保存する')
     parser.add_argument('--visualize-positives-top-n', type=int, default=10, help='陽性日数上位N件の結果を追加で可視化する（0で無効）')
     parser.add_argument('--top-feature-count', type=int, default=20, help='特徴量重要度の可視化で表示する特徴量数')
+    parser.add_argument('--output-dir', type=str, default=None, help='結果ファイルを保存するディレクトリ（既定: datasets/derived_artifacts/rq1_rq2/evaluation_summary_comparison）')
     args = parser.parse_args()
     
-    output_summary_dir = REPO_ROOT / "datasets" / "derived_artifacts" / "rq1_rq2" / "evaluation_summary_comparison"
+    if args.output_dir:
+        output_summary_dir = Path(args.output_dir).expanduser()
+        if not output_summary_dir.is_absolute():
+            output_summary_dir = (REPO_ROOT / output_summary_dir).resolve()
+        else:
+            output_summary_dir = output_summary_dir.resolve()
+    else:
+        output_summary_dir = DEFAULT_OUTPUT_DIR
     output_summary_dir.mkdir(parents=True, exist_ok=True)
     print(f"✅ Aggregated results will be saved to: {output_summary_dir.resolve()}")
 
@@ -729,7 +741,8 @@ def main():
             final_importances_df if not final_importances_df.empty else pd.DataFrame(columns=['model','feature','importance']),
             exp_num,
             num_projects_in_exp,
-            args.top_feature_count
+            args.top_feature_count,
+            output_summary_dir,
         )
 
     print("\n🎉 Analysis complete!")
