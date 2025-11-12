@@ -65,12 +65,13 @@ def _scan_coverage(
     packages: Set[str],
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-) -> Tuple[Dict[str, date], int, int, Optional[date], Optional[date]]:
+) -> Tuple[Dict[str, date], int, int, Optional[date], Optional[date], Dict[str, int]]:
     """Inspect coverage directories and collect per-project metadata."""
     first_dates: Dict[str, date] = {}
     total_reports = 0
     overall_min: Optional[date] = None
     overall_max: Optional[date] = None
+    per_project_reports: Dict[str, int] = {}
 
     eight_digits = re.compile(r"^\d{8}$")
 
@@ -80,6 +81,7 @@ def _scan_coverage(
             continue
 
         first_for_project: Optional[date] = None
+        reports_for_project = 0
         try:
             entries = list(os.scandir(project_dir))
         except FileNotFoundError:
@@ -107,6 +109,7 @@ def _scan_coverage(
             if end_date and day > end_date:
                 continue
             total_reports += 1
+            reports_for_project += 1
             if first_for_project is None or day < first_for_project:
                 first_for_project = day
             if overall_min is None or day < overall_min:
@@ -116,8 +119,9 @@ def _scan_coverage(
 
         if first_for_project is not None:
             first_dates[package] = first_for_project
+            per_project_reports[package] = reports_for_project
 
-    return first_dates, total_reports, len(first_dates), overall_min, overall_max
+    return first_dates, total_reports, len(first_dates), overall_min, overall_max, per_project_reports
 
 
 def _load_metadata(metadata_csv: Path) -> Dict[str, str]:
@@ -273,6 +277,43 @@ def _collect_prediction_day_stats(
     }
 
 
+def _scan_srcmap(
+    srcmap_root: Path,
+    packages: Set[str],
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> Tuple[Dict[str, int], int, int]:
+    """Count srcmap json snapshots per project within the given date range."""
+    per_project: Dict[str, int] = {}
+    total_reports = 0
+    projects_with_reports = 0
+
+    date_pattern = re.compile(r"(\d{8})")
+
+    for package in sorted(packages):
+        project_dir = srcmap_root / package
+        if not project_dir.is_dir():
+            continue
+        # Common layout: <package>/json/<YYYYMMDD>.json, but use rglob for safety.
+        count = 0
+        for json_file in project_dir.rglob("*.json"):
+            match = date_pattern.search(json_file.stem)
+            if not match:
+                continue
+            day = datetime.strptime(match.group(1), "%Y%m%d").date()
+            if start_date and day < start_date:
+                continue
+            if end_date and day > end_date:
+                continue
+            count += 1
+        if count > 0:
+            per_project[package] = count
+            total_reports += count
+            projects_with_reports += 1
+
+    return per_project, total_reports, projects_with_reports
+
+
 def _cli_date(value: str) -> date:
     try:
         return datetime.strptime(value, "%Y-%m-%d").date()
@@ -288,6 +329,7 @@ def compute_statistics(
     cloned_root: Path,
     coverage_root: Path,
     prediction_root: Path,
+    srcmap_root: Path,
     min_reports_per_repo: int,
     coverage_start_filter: Optional[date],
     coverage_end_filter: Optional[date],
@@ -352,6 +394,7 @@ def compute_statistics(
         coverage_projects,
         coverage_start,
         coverage_end,
+        _,
     ) = _scan_coverage(
         coverage_root,
         stage3_packages,
@@ -377,6 +420,58 @@ def compute_statistics(
 
     prediction_stats = _collect_prediction_day_stats(prediction_root)
 
+    prediction_projects = {
+        entry["project"]
+        for entry in prediction_stats["per_project"]
+        if isinstance(entry, dict) and "project" in entry
+    }
+    if prediction_projects:
+        (
+            _,
+            prediction_coverage_total_reports,
+            prediction_coverage_projects,
+            _,
+            _,
+            prediction_per_project_reports,
+        ) = _scan_coverage(
+            coverage_root,
+            prediction_projects,
+            start_date=coverage_start_filter,
+            end_date=coverage_end_filter,
+        )
+    else:
+        prediction_coverage_total_reports = 0
+        prediction_coverage_projects = 0
+        prediction_per_project_reports = {}
+
+    prediction_coverage_reports_per_project = {
+        project: prediction_per_project_reports.get(project, 0)
+        for project in sorted(prediction_projects)
+    }
+    prediction_coverage_reports_total = sum(prediction_coverage_reports_per_project.values())
+
+    if prediction_projects and srcmap_root.is_dir():
+        (
+            prediction_srcmap_per_project,
+            prediction_srcmap_total_reports,
+            prediction_srcmap_projects,
+        ) = _scan_srcmap(
+            srcmap_root,
+            prediction_projects,
+            start_date=coverage_start_filter,
+            end_date=coverage_end_filter,
+        )
+    else:
+        prediction_srcmap_per_project = {}
+        prediction_srcmap_total_reports = 0
+        prediction_srcmap_projects = 0
+
+    prediction_srcmap_reports_per_project = {
+        project: prediction_srcmap_per_project.get(project, 0)
+        for project in sorted(prediction_projects)
+    }
+    prediction_srcmap_reports_total = sum(prediction_srcmap_reports_per_project.values())
+
     return {
         "total_issues": total_issues,
         "c_cpp_issues": stage1_issue_count,
@@ -397,6 +492,14 @@ def compute_statistics(
         "prediction_days_with_vcc": prediction_stats["days_with_vcc"],
         "prediction_days_without_vcc": prediction_stats["days_without_vcc"],
         "prediction_days_per_project": prediction_stats["per_project"],
+        "prediction_coverage_reports": prediction_coverage_total_reports,
+        "prediction_coverage_projects": prediction_coverage_projects,
+        "prediction_coverage_reports_per_project": prediction_coverage_reports_per_project,
+        "prediction_coverage_reports_total_per_project": prediction_coverage_reports_total,
+        "prediction_srcmap_reports": prediction_srcmap_total_reports,
+        "prediction_srcmap_projects": prediction_srcmap_projects,
+        "prediction_srcmap_reports_per_project": prediction_srcmap_reports_per_project,
+        "prediction_srcmap_reports_total_per_project": prediction_srcmap_reports_total,
     }
 
 
@@ -410,35 +513,7 @@ def _format_percent(value: float) -> str:
 
 def build_paragraph(stats: Dict[str, object]) -> str:
     percent = _format_percent(float(stats["c_cpp_percent"]))
-    text = (
-        "We collected issue reports created on repositories that have code primarily "
-        "written in C/C++. The reason why we only focus on C/C++ is that many C/C++ "
-        "projects use OSS-Fuzz and many vulnerabilities are discovered in those "
-        "projects. We obtained {c_cpp_issues} issues ({c_cpp_percent} %) from "
-        "{c_cpp_repos} repositories. Furthermore, we restricted the dataset to "
-        "projects that we successfully cloned using the OSS-Fuzz metadata. This step "
-        "resulted in {cloned_issues} issues from {cloned_repos} repositories. Also, "
-        "to ensure evaluation reliability, we excluded the repositories that do not "
-        "have at least 10 vulnerability issue reports, resulting in {min10_issues} "
-        "issues from {min10_repos} repositories.\n"
-        "Additionally, the model we develop makes use of fuzzing coverage. We thus "
-        "collect daily coverage reports that are archived on the public Google Cloud "
-        "Storage (GCS) of OSS-Fuzz. We downloaded a total of {coverage_reports} daily "
-        "coverage reports from the abovementioned {coverage_projects} projects, which "
-        "are generated from {coverage_start} to {coverage_end}. These files contain "
-        "aggregated coverage data, such as line, function, region, branch, and "
-        "instruction coverage for the entire project for each day.\n"
-        "In addition, we analyzed prediction CSVs derived from the modeling pipeline, "
-        "covering {prediction_total_days} calendar days across {prediction_projects} "
-        "projects. Among those days, {prediction_days_with_vcc} include actual "
-        "vulnerability-inducing commits while the remaining {prediction_days_without_vcc} "
-        "do not contain such commits.\n"
-        "It is worth mentioning that we excluded vulnerability reports created before "
-        "the first coverage report for each project (i.e., removed issues created "
-        "before their integration into OSS-Fuzz). This filtering yields "
-        "{final_issues} vulnerability reports. Table II summarizes the statistics of "
-        "the final dataset."
-    )
+    text = ""
     return text.format(
         c_cpp_issues=_format_int(int(stats["c_cpp_issues"])),
         c_cpp_percent=percent,
@@ -479,6 +554,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     default_cloned_root = repo_root / "datasets" / "raw" / "cloned_c_cpp_projects"
     default_coverage_root = repo_root / "datasets" / "raw" / "coverage_report"
     default_prediction_root = repo_root / "datasets" / "model_outputs" / "random_forest"
+    default_srcmap_root = repo_root / "datasets" / "raw" / "srcmap_json"
     default_stats_output = (
         repo_root / "datasets" / "statistics" / "dataset_summary_stats.json"
     )
@@ -495,6 +571,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         type=Path,
         default=default_prediction_root,
         help="Root directory that stores per-project prediction CSVs.",
+    )
+    parser.add_argument(
+        "--srcmap-root",
+        type=Path,
+        default=default_srcmap_root,
+        help="Root directory that stores per-project srcmap JSON snapshots.",
     )
     parser.add_argument(
         "--coverage-start-date",
@@ -544,6 +626,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cloned_root=args.cloned_root,
         coverage_root=args.coverage_root,
         prediction_root=args.prediction_root,
+        srcmap_root=args.srcmap_root,
         min_reports_per_repo=args.min_issues_per_repo,
         coverage_start_filter=args.coverage_start_date,
         coverage_end_filter=args.coverage_end_date,

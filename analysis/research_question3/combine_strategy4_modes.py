@@ -33,6 +33,12 @@ DEFAULT_OUTPUT_DIR = (
 )
 
 
+RENAME_COLUMNS = {
+    "success_ratio": "detection_vulnerability_rate",
+    "success_triggers": "detection_vulnerability_trigger",
+}
+
+
 @dataclass(frozen=True)
 class CombineStats:
     filename: str
@@ -64,6 +70,16 @@ def write_csv_rows(path: Path, header: Sequence[str], rows: Iterable[Dict[str, s
             writer.writerow(row)
 
 
+def rename_header(header: Sequence[str]) -> List[str]:
+    """Return a header sequence with configured columns renamed."""
+    return [RENAME_COLUMNS.get(column, column) for column in header]
+
+
+def rename_row(row: Dict[str, str]) -> Dict[str, str]:
+    """Rename keys in a single CSV row according to RENAME_COLUMNS."""
+    return {RENAME_COLUMNS.get(column, column): value for column, value in row.items()}
+
+
 def combine_file(
     simple_file: Path,
     multi_file: Path,
@@ -76,7 +92,11 @@ def combine_file(
 ) -> CombineStats:
     """Merge a pair of CSV files, keeping Strategy4 simple rows and adding Strategy5."""
     header, simple_rows = read_csv_rows(simple_file)
+    header = rename_header(header)
+    simple_rows = [rename_row(row) for row in simple_rows]
+
     _, multi_rows = read_csv_rows(multi_file)
+    multi_rows = [rename_row(row) for row in multi_rows]
 
     if strategy_column not in header:
         # For completeness, copy untouched files (though we currently expect all to have strategy).
