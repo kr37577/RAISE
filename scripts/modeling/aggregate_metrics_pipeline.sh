@@ -3,7 +3,7 @@
 #SBATCH --job-name=aggregate_metrics
 #SBATCH --output=logs/aggregate_metrics_%A_%a.out
 #SBATCH --error=errors/aggregate_metrics_%A_%a.err
-#SBATCH --array=1-280
+#SBATCH --array=1-270
 #SBATCH --time=04:00:00
 #SBATCH --partition=cluster_short
 #SBATCH --ntasks=1
@@ -27,7 +27,7 @@ PYTHON_SCRIPT_PATH_1="${script_dir}/aggregate_metrics_pipeline.py"
 
 # 後で消す
 VULJIT_BASE_DATA_DIR='/work/riku-ka/vuljit/datasets/derived_artifacts/aggregate'
-VULJIT_PROJECT_MAPPING='/work/riku-ka/vuljit/datasets/reference_mappings/filtered_project_mapping.csv'
+# VULJIT_PROJECT_MAPPING='/work/riku-ka/vuljit/datasets/reference_mappings/filtered_project_mapping.csv'
 
 # ログ用、エラー用ディレクトリ作成
 mkdir -p errors
@@ -38,10 +38,10 @@ mkdir -p "${VULJIT_BASE_DATA_DIR}"
 echo "====== Starting Slurm Task ${SLURM_ARRAY_TASK_ID} ======"
 
 # --- メイン処理 ---
-MAPPING_FILE="${VULJIT_PROJECT_MAPPING:-${script_dir}/../project_mapping/filtered_project_mapping.csv}"
-TARGET_LINE=$(sed -n "$((${SLURM_ARRAY_TASK_ID} + 1))p" ${MAPPING_FILE})
-PROJECT_ID=$(echo ${TARGET_LINE} | cut -d',' -f1)
-DIRECTORY_NAME=$(echo ${TARGET_LINE} | cut -d',' -f2)
+MAPPING_FILE="${VULJIT_PROJECT_MAPPING:-/work/riku-ka/vuljit/datasets/derived_artifacts/oss_fuzz_metadata/c_cpp_vulnerability_summary.csv}"
+TARGET_LINE_NUMBER=$((SLURM_ARRAY_TASK_ID + 1))
+PROJECT_ID=$(awk -F',' -v line="${TARGET_LINE_NUMBER}" 'NR==line {print $1}' "${MAPPING_FILE}")
+DIRECTORY_NAME="${PROJECT_ID}"
 
 if [ -z "${DIRECTORY_NAME}" ]; then
     DIRECTORY_NAME=${PROJECT_ID}
@@ -62,7 +62,7 @@ default_coverage_dir="${repo_root}/datasets/coverage_metrics"
 METRICS_BASE_PATH="/work/riku-ka/vuljit/datasets/derived_artifacts/commit_metrics"
 COVERAGE_BASE_PROJECT_PATH="/work/riku-ka/vuljit/datasets/derived_artifacts/coverage_metrics"
 PATCH_COVERAGE_BASE_PATH="/work/riku-ka/vuljit/datasets/derived_artifacts/patch_coverage_metrics"
-# OUTPUT_BASE_PATH="/work/riku-ka/daily_commit_summary_past_vul_0802_now"
+
 
 mkdir -p "${COVERAGE_BASE_PROJECT_PATH}"
 
