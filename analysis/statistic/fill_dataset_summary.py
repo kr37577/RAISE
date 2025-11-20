@@ -195,6 +195,68 @@ def _parse_is_vcc_flag(raw: str) -> int:
         return 0
 
 
+def _resolve_vulnerability_id(row: Dict[str, str], fallback_index: int) -> str:
+    """Resolve a stable vulnerability identifier (value, OSV, or fallback)."""
+    for key in ("monorail_id", "OSV_id", "vulnerability_id"):
+        value = row.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    introduced = row.get("introduced_commits") or ""
+    if introduced.strip():
+        return f"introduced:{introduced.strip()}"
+    return f"row_{fallback_index}"
+
+
+def _collect_rq3_targets(
+    detection_csv: Path,
+    build_counts_csv: Optional[Path] = None,
+    allowed_projects: Optional[Set[str]] = None,
+) -> Tuple[int, Dict[str, int]]:
+    """Return unique vulnerability IDs targeted in the RQ3 detection table."""
+    valid_projects: Optional[Set[str]] = None
+    if build_counts_csv and build_counts_csv.is_file():
+        with build_counts_csv.open("r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            valid_projects = {
+                (row.get("project") or "").strip()
+                for row in reader
+                if (row.get("project") or "").strip()
+            }
+
+    vuln_ids_by_project: Dict[str, Set[str]] = {}
+    with detection_csv.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for index, row in enumerate(reader):
+            project = (row.get("project") or "").strip()
+            if not project:
+                project = (row.get("package_name") or "").strip()
+            if not project:
+                continue
+            if allowed_projects is not None and project not in allowed_projects:
+                continue
+            if valid_projects is not None and project not in valid_projects:
+                continue
+            try:
+                detection_days = float(row.get("detection_time_days", ""))
+            except (TypeError, ValueError):
+                continue
+            if detection_days != detection_days or detection_days < 0:  # NaN or negative
+                continue
+            vuln_id = _resolve_vulnerability_id(row, index)
+            vuln_ids_by_project.setdefault(project, set()).add(vuln_id)
+
+    unique_ids_global: Set[str] = set()
+    per_project_counts: Dict[str, int] = {}
+    for project, ids in vuln_ids_by_project.items():
+        per_project_counts[project] = len(ids)
+        unique_ids_global.update(ids)
+
+    return len(unique_ids_global), per_project_counts
+
+
 def _pick_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
     """Return the first matching column using case-insensitive lookup."""
     field_map = {name.lower(): name for name in fieldnames}
@@ -333,6 +395,8 @@ def compute_statistics(
     min_reports_per_repo: int,
     coverage_start_filter: Optional[date],
     coverage_end_filter: Optional[date],
+    rq3_detection_table: Optional[Path] = None,
+    rq3_build_counts: Optional[Path] = None,
 ) -> Dict[str, object]:
     metadata = _load_metadata(metadata_csv)
     if not metadata:
@@ -472,6 +536,23 @@ def compute_statistics(
     }
     prediction_srcmap_reports_total = sum(prediction_srcmap_reports_per_project.values())
 
+    rq3_vuln_count = 0
+    rq3_vuln_per_project: Dict[str, int] = {}
+    if rq3_detection_table and rq3_detection_table.is_file():
+        allowed_projects = set(prediction_projects) if prediction_projects else None
+        rq3_vuln_count, rq3_vuln_per_project = _collect_rq3_targets(
+            rq3_detection_table,
+            build_counts_csv=rq3_build_counts,
+            allowed_projects=allowed_projects,
+        )
+
+    prediction_days_per_project = []
+    for entry in prediction_stats["per_project"]:
+        project = entry.get("project")
+        copy = dict(entry)
+        copy["rq3_target_vulnerabilities"] = rq3_vuln_per_project.get(project, 0)
+        prediction_days_per_project.append(copy)
+
     return {
         "total_issues": total_issues,
         "c_cpp_issues": stage1_issue_count,
@@ -491,7 +572,7 @@ def compute_statistics(
         "prediction_total_days": prediction_stats["total_days"],
         "prediction_days_with_vcc": prediction_stats["days_with_vcc"],
         "prediction_days_without_vcc": prediction_stats["days_without_vcc"],
-        "prediction_days_per_project": prediction_stats["per_project"],
+        "prediction_days_per_project": prediction_days_per_project,
         "prediction_coverage_reports": prediction_coverage_total_reports,
         "prediction_coverage_projects": prediction_coverage_projects,
         "prediction_coverage_reports_per_project": prediction_coverage_reports_per_project,
@@ -500,6 +581,8 @@ def compute_statistics(
         "prediction_srcmap_projects": prediction_srcmap_projects,
         "prediction_srcmap_reports_per_project": prediction_srcmap_reports_per_project,
         "prediction_srcmap_reports_total_per_project": prediction_srcmap_reports_total,
+        "rq3_target_vulnerabilities": rq3_vuln_count,
+        "rq3_target_vulnerabilities_per_project": rq3_vuln_per_project,
     }
 
 
@@ -558,6 +641,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     default_stats_output = (
         repo_root / "datasets" / "statistics" / "dataset_summary_stats.json"
     )
+    default_rq3_detection_table = (
+        repo_root
+        / "datasets"
+        / "derived_artifacts"
+        / "detection_time"
+        / "detection_time_results.csv"
+    )
+    default_rq3_build_counts = (
+        repo_root
+        / "datasets"
+        / "derived_artifacts"
+        / "oss_fuzz_build_counts"
+        / "project_build_counts.csv"
+    )
 
     parser = argparse.ArgumentParser(
         description="Fill the dataset summary paragraph with measured statistics."
@@ -612,6 +709,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="If specified, suppress the JSON statistics on stderr.",
     )
+    parser.add_argument(
+        "--rq3-detection-table",
+        type=Path,
+        default=default_rq3_detection_table,
+        help="RQ3 detection baseline CSV (used to record targeted vulnerabilities).",
+    )
+    parser.add_argument(
+        "--rq3-build-counts",
+        type=Path,
+        default=default_rq3_build_counts,
+        help="Optional build counts CSV to restrict RQ3 targets to known projects.",
+    )
     args = parser.parse_args(argv)
     if (
         args.coverage_start_date
@@ -630,6 +739,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         min_reports_per_repo=args.min_issues_per_repo,
         coverage_start_filter=args.coverage_start_date,
         coverage_end_filter=args.coverage_end_date,
+        rq3_detection_table=args.rq3_detection_table,
+        rq3_build_counts=args.rq3_build_counts,
     )
 
     if not args.no_stats:
