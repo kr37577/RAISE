@@ -23,5 +23,3 @@ git -C "${repo_dir}" checkout "${repo_commit}"
 PYTHON_SCRIPT_PATH_1="${vuljit_dir}/scripts/project_mapping/oss_fuzz_project_info.py"
 "${PYTHON_EXEC}" "${PYTHON_SCRIPT_PATH_1}"
 
-# プロジェクトごとの clone/処理（runner/テンプレートは要相談）
-bash "${vuljit_dir}/scripts/project_mapping/clone_and_run_projects.sh"
