@@ -41,7 +41,7 @@ chrome_options.add_argument("--disable-dev-shm-usage")  # /dev/shm使用無効�
 chrome_options.add_argument(
     # UserAgent設定
 
-    'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    )
 
 # ページの読み込みタイムアウト（秒）
 page_load_timeout = 45  # 長めに設定

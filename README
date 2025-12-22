@@ -147,11 +147,10 @@ bash RQ3.sh
 <!-- Describe where the outputs are stored and what files the reader should expect. -->
 
 After successful execution, results will be located in:
-
-| Research Question | Output Path |
-|-------------------|-------------|
-| RQ1 / RQ2 | `analysis/research_question1_2/` |
-| RQ3 | `analysis/research_question3/` |
+| Research Question | Output path                          |
+|-------------------|--------------------------------------|
+| RQ1 / RQ2         | `datasets/derived_artifacts/rq1_rq2` |
+| RQ3               | `datasets/derived_artifacts/rq3`     |
 
 ---
 
