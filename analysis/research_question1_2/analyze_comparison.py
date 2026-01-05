@@ -21,8 +21,17 @@ COLOR_PALETTE = {
     "Random": "#2ca02c"         # 緑 (追加)
 }
 
-TITLE_FONT_SIZE = 28
-AXIS_LABEL_FONT_SIZE = 24
+EXPERIMENT_LABELS = {
+    0: "Random",
+    1: "Kamei",
+    2: "Kamei+Coverage",
+    3: "VCCFinder",
+    4: "VCCFinder+Coverage",
+    5: "Coverage",
+}
+
+TITLE_FONT_SIZE = 30
+AXIS_LABEL_FONT_SIZE = 26
 TICK_FONT_SIZE = 20
 SMALL_TICK_FONT_SIZE = 20
 LEGEND_FONT_SIZE = 20
@@ -197,10 +206,13 @@ def visualize_per_model_importance(
             inner='box',
             linewidth=1.5,
             saturation=0.8,
+            width=1.0,
         )
 
+        exp_label = EXPERIMENT_LABELS.get(exp_num)
+        exp_suffix = f" ({exp_label})" if exp_label else ""
         plt.title(
-            f'Feature Importance ({model_name}) for Exp {exp_num} - Top {k}',
+            f'Feature Importance ({model_name})\nfor Exp {exp_num}{exp_suffix} - Top {k}',
             fontsize=TITLE_FONT_SIZE,
             weight='bold',
         )
