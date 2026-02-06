@@ -108,8 +108,6 @@ docker compose run --rm replication run_all
 ### 4) Run a specific replication step
 
 ```bash
-docker compose run --rm replication run_step RQ3
-docker compose run --rm replication run_step RQ3 --prepare-only
 docker compose run --rm replication run_step RQ3 --simulate-only
 docker compose run --rm replication run_step data_acquisition --no-vulcsv --no-coverage --no-srcmap
 ```
